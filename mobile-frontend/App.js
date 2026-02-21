@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, ActivityIndicator } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import * as Font from "expo-font";
@@ -17,12 +17,43 @@ import { createStackNavigator } from "@react-navigation/stack";
 import SignIn from "./screens/SignIn";
 import SignUp from "./screens/SignUp";
 import Profile from "./screens/Profile";
+import Home from "./screens/Home";
 import { supabase } from "./database/supabase";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import NavBar from "./components/NavBar";
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
 const Stack = createStackNavigator();
+
+// Navigation component that uses auth context
+function Navigation() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#6F4BF2" />
+      </View>
+    );
+  }
+
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {user ? (
+        // User is logged in - show app screens with bottom navigation
+        <Stack.Screen name="MainApp" component={NavBar} />
+      ) : (
+        // User is not logged in - show auth screens
+        <>
+          <Stack.Screen name="SignIn" component={SignIn} />
+          <Stack.Screen name="SignUp" component={SignUp} />
+        </>
+      )}
+    </Stack.Navigator>
+  );
+}
 
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
@@ -41,13 +72,16 @@ export default function App() {
         });
 
         // Test Supabase connection
-        console.log('🔍 Testing Supabase connection...');
+        console.log("🔍 Testing Supabase connection...");
         const { data, error } = await supabase.auth.getSession();
         if (error) {
-          console.log('❌ Supabase connection error:', error.message);
+          console.log("❌ Supabase connection error:", error.message);
         } else {
-          console.log('✅ Successfully connected to Supabase!');
-          console.log('Session status:', data.session ? 'User logged in' : 'No active session');
+          console.log("✅ Successfully connected to Supabase!");
+          console.log(
+            "Session status:",
+            data.session ? "User logged in" : "No active session",
+          );
         }
       } catch (e) {
         console.warn(e);
@@ -77,19 +111,14 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <View style={styles.container} onLayout={onLayoutRootView}>
-        <StatusBar style="light" />
-        <NavigationContainer>
-          <Stack.Navigator
-            initialRouteName="SignIn"
-            screenOptions={{ headerShown: false }}
-          >
-            <Stack.Screen name="SignIn" component={SignIn} />
-            <Stack.Screen name="SignUp" component={SignUp} />
-            <Stack.Screen name="Profile" component={Profile} />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </View>
+      <AuthProvider>
+        <View style={styles.container} onLayout={onLayoutRootView}>
+          <StatusBar style="auto" />
+          <NavigationContainer>
+            <Navigation />
+          </NavigationContainer>
+        </View>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }
@@ -97,5 +126,9 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  centered: {
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

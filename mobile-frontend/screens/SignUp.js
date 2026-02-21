@@ -76,7 +76,7 @@ const SignUp = () => {
       );
     } else {
       Alert.alert("Success!", "Account created successfully!");
-      navigation.navigate("Profile");
+      // Navigation will be handled automatically by AuthContext
     }
   };
 

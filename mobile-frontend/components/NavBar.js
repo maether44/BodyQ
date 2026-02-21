@@ -11,12 +11,18 @@ const Tab = createBottomTabNavigator();
 
 export default function NavBar() {
     return (
-        <NavigationContainer>
             <Tab.Navigator
                 screenOptions={{
                     headerShown: false,
-                    tabBarActiveTintColor: 'tomato',
+                    tabBarActiveTintColor: '#6F4BF2',
                     tabBarInactiveTintColor: 'gray',
+                    tabBarStyle: {
+                        borderTopWidth: 1,
+                        borderTopColor: '#E0E0E0',
+                        height: 60,
+                        paddingBottom: 8,
+                        paddingTop: 8,
+                    },
                 }}
             >
                 <Tab.Screen
@@ -34,12 +40,11 @@ export default function NavBar() {
                     component={Profile}
                     options={{
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="profile" size={size} color={color} />
+                        <Ionicons name="person" size={size} color={color} />
                     ),
                     }}
                 />
 
             </Tab.Navigator>
-        </NavigationContainer>
     )
 }

@@ -38,7 +38,7 @@ const SignIn = () => {
       Alert.alert("Sign In Error", error.message);
     } else {
       Alert.alert("Success", "Welcome back!");
-      navigation.navigate("Profile");
+      // Navigation will be handled automatically by AuthContext
     }
   };
 
@@ -60,7 +60,7 @@ const SignIn = () => {
               label="Email"
               placeholder="Enter your email"
               onBlur={onBlur}
-              autoCapitalize={'none'}
+              autoCapitalize={"none"}
               onChangeText={onChange}
               value={value}
               icon={Mail}
@@ -79,7 +79,7 @@ const SignIn = () => {
               placeholder="Enter your password"
               onBlur={onBlur}
               onChangeText={onChange}
-              autoCapitalize={'none'}
+              autoCapitalize={"none"}
               value={value}
               secureTextEntry
               icon={Lock}

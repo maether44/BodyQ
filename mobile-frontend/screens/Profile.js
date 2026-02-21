@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { supabase } from "../database/supabase";
+import { useAuth } from "../context/AuthContext";
 import Input from "../components/Input";
 import Button from "../components/Button";
 import {
@@ -24,6 +25,7 @@ import {
 
 
 export default function Profile() {
+  const { signOut: authSignOut } = useAuth();
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -113,19 +115,21 @@ export default function Profile() {
   }
 
   async function signOut() {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: async () => {
-          const { error } = await supabase.auth.signOut();
-          if (error) Alert.alert("Error", error.message);
-        },
+  Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+    { text: "Cancel", style: "cancel" },
+    {
+      text: "Sign Out",
+      style: "destructive",
+      onPress: async () => {
+        try {
+          await authSignOut();
+        } catch (error) {
+          Alert.alert("Error", error.message);
+        }
       },
-    ]);
-  }
-
+    },
+  ]);
+}
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
