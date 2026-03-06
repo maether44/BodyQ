@@ -9,11 +9,11 @@ import {
 } from "react-native";
 import { useForm, Controller } from "react-hook-form";
 import AuthLayout from "../components/AuthLayout";
-import Input from "../components/Input";
-import Button from "../components/Button";
+import Input from "../components/register/Input";
+import Button from "../components/register/Button";
 import { Mail, Lock, LogIn } from "lucide-react-native";
 import { useNavigation } from "@react-navigation/native";
-import { supabase } from "../services/supabase";
+import { supabase } from "../lib/supabase";
 
 const SignIn = () => {
   const navigation = useNavigation();

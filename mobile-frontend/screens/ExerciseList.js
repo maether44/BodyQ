@@ -12,9 +12,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-const BASE_IMG =
-  "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/";
-
 const C = {
   bg: "#0F0B1E",
   card: "#161230",
@@ -68,66 +65,7 @@ export default function ExerciseList() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
 
-  const fetchExercises = useCallback(async () => {
-    try {
-      setError("");
-      const res = await fetch(
-        "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json",
-      );
-      if (!res.ok) throw new Error("Failed to fetch exercises");
-      const data = await res.json();
-      setExercises(Array.isArray(data) ? data : []);
-    } catch (e) {
-      setError(e?.message || "Something went wrong");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchExercises();
-  }, [fetchExercises]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchExercises();
-  };
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return exercises;
-    return exercises.filter((e) => {
-      const name = e.name?.toLowerCase() || "";
-      const category = e.category?.toLowerCase() || "";
-      const muscles = (e.primaryMuscles || []).join(" ").toLowerCase();
-      return (
-        name.includes(q) || category.includes(q) || muscles.includes(q)
-      );
-    });
-  }, [exercises, query]);
-
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={C.purple} />
-        <Text style={styles.loadingText}>Loading exercises...</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.centerContainer}>
-        <Ionicons name="alert-circle-outline" size={56} color={C.red} />
-        <Text style={styles.errorText}>Error loading exercises</Text>
-        <Text style={styles.errorMessage}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchExercises}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  
 
   return (
     <View style={styles.container}>

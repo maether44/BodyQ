@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import MacroBar from "../components/MacroBar";
 import RingProgress from "../components/RingProgress";
-import { registerTourRef } from "../components/tourRefs";
+import { registerTourRef } from "../components/onBoarding/tourRefs";
 import {
   CALORIE_TARGET,
   MACROS,
@@ -21,7 +21,7 @@ import {
   WEEK,
 } from "../data/mockUser";
 
-import { supabase } from "../services/supabase";
+import { supabase } from "../lib/supabase";
 
 const C = {
   bg: "#0F0B1E",
@@ -69,7 +69,7 @@ export default function Home({ navigation }) {
 
         const { data, error } = await supabase
           .from("profiles")
-          .select("username")
+          .select("full_name")
           .eq("id", user.id)
           .maybeSingle();
 
@@ -77,9 +77,7 @@ export default function Home({ navigation }) {
           console.error("Error fetching profile username:", error);
         }
 
-        const metadataName =
-          user.user_metadata?.full_name || user.user_metadata?.username;
-        const resolvedName = data?.username || metadataName || USER.name;
+        const resolvedName = data?.username || user.user_metadata?.full_name;
         setUserName(resolvedName);
       } catch (error) {
         console.error("Error fetching user profile:", error);
@@ -115,7 +113,7 @@ export default function Home({ navigation }) {
         <View style={s.header}>
           <View>
             <Text style={s.greeting}>{greeting()},</Text>
-            <Text style={s.name}>{userName || "User"} 👋</Text>
+            <Text style={s.name}>{userName} 👋</Text>
           </View>
           <TouchableOpacity
             style={s.avatar}

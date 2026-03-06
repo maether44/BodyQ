@@ -13,15 +13,15 @@ import { Inter_400Regular, Inter_600SemiBold } from "@expo-google-fonts/inter";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
-
-import SignIn from "./screens/SignIn";
-import SignUp from "./screens/SignUp";
-import Profile from "./screens/Profile";
-import Home from "./screens/Home";
-import { supabase } from "./services/supabase";
+import { supabase } from "./lib/supabase";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+
+import SignIn from "./auth/SignIn";
+import SignUp from "./auth/SignUp";
+import Profile from "./screens/Profile";
 import NavBar from "./components/NavBar";
-import ExerciseList from "./screens/ExerciseList";
+import OnBoardingGoal from "./screens/OnBoardingGoal";
+import MealLogger from "./screens/nutrition/MealLogger";
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -30,7 +30,7 @@ const Stack = createStackNavigator();
 
 // Navigation component that uses auth context
 function Navigation() {
-  const { user, loading } = useAuth();
+  const { user, isNewUser, loading } = useAuth();
 
   if (loading) {
     return (
@@ -40,21 +40,24 @@ function Navigation() {
     );
   }
 
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (
-        // User is logged in - show app screens with bottom navigation
+      {!user ? (
+        // Not logged in → auth screens
+        <>
+          <Stack.Screen name="SignIn"  component={SignIn}  />
+          <Stack.Screen name="SignUp"  component={SignUp}  />
+        </>
+      ) : isNewUser ? (
+        // Logged in but onboarding not done → onboarding
+        <Stack.Screen name="OnBoarding" component={OnBoardingGoal} />
+      ) : (
+        // Fully set up → main app
         <>
           <Stack.Screen name="MainApp" component={NavBar} />
-          <Stack.Screen name="Home" component={Home} />
-          <Stack.Screen name="Exercises" component={ExerciseList} />
           <Stack.Screen name="Profile" component={Profile} />
-        </>
-      ) : (
-        // User is not logged in - show auth screens
-        <>
-          <Stack.Screen name="SignIn" component={SignIn} />
-          <Stack.Screen name="SignUp" component={SignUp} />
+          <Stack.Screen name="MealLogger" component={MealLogger} />
         </>
       )}
     </Stack.Navigator>
@@ -67,7 +70,6 @@ export default function App() {
   useEffect(() => {
     async function prepare() {
       try {
-        // Pre-load fonts, make any API calls you need to do here
         await Font.loadAsync({
           "Outfit-Regular": Outfit_400Regular,
           "Outfit-Medium": Outfit_500Medium,
@@ -77,22 +79,16 @@ export default function App() {
           "Inter-SemiBold": Inter_600SemiBold,
         });
 
-        // Test Supabase connection
         console.log("🔍 Testing Supabase connection...");
         const { data, error } = await supabase.auth.getSession();
         if (error) {
           console.log("❌ Supabase connection error:", error.message);
         } else {
           console.log("✅ Successfully connected to Supabase!");
-          console.log(
-            "Session status:",
-            data.session ? "User logged in" : "No active session",
-          );
         }
       } catch (e) {
         console.warn(e);
       } finally {
-        // Tell the application to render
         setAppIsReady(true);
       }
     }
@@ -102,11 +98,6 @@ export default function App() {
 
   const onLayoutRootView = useCallback(async () => {
     if (appIsReady) {
-      // This tells the splash screen to hide immediately! If we call this after
-      // `setAppIsReady`, then we may see a blank screen while the app is
-      // loading its initial state and rendering its first pixels. So instead,
-      // we hide the splash screen once we know the root view has already
-      // performed layout.
       await SplashScreen.hideAsync();
     }
   }, [appIsReady]);

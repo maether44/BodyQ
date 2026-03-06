@@ -9,10 +9,10 @@ import {
   Image,
   ActivityIndicator,
 } from "react-native";
-import { supabase } from "../services/supabase";
+import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
-import Input from "../components/Input";
-import Button from "../components/Button";
+import Input from "../components/register/Input";
+import Button from "../components/register/Button";
 import {
   User,
   Mail,
@@ -29,9 +29,8 @@ export default function Profile() {
   const [updating, setUpdating] = useState(false);
   const [editing, setEditing] = useState(false);
   const [profile, setProfile] = useState({
-    username: "",
+    userName: "",
     email: "",
-    full_name: "",
     height: "",
     weight: "",
     avatar_url: "",
@@ -55,17 +54,16 @@ export default function Profile() {
         .from("profiles")
         .select("*")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== "PGRST116") {
+      if (error) {
         throw error;
       }
 
       if (data) {
         setProfile({
-          username: data.username || "",
+          userName: user.username || user.user_metadata?.username,
           email: user.email || "",
-          full_name: data.full_name || "",
           height: data.height?.toString() || "",
           weight: data.weight?.toString() || "",
           avatar_url: data.avatar_url || "",
@@ -92,8 +90,7 @@ export default function Profile() {
 
       const updates = {
         id: user.id,
-        username: profile.username,
-        full_name: profile.full_name,
+        username: profile.userName,
         height: profile.height ? parseFloat(profile.height) : null,
         weight: profile.weight ? parseFloat(profile.weight) : null,
         avatar_url: profile.avatar_url,
@@ -154,25 +151,16 @@ export default function Profile() {
             </TouchableOpacity>
           )}
         </View>
-        <Text style={styles.title}>{profile.full_name || "Your Profile"}</Text>
+        <Text style={styles.title}>{profile.username}</Text>
         <Text style={styles.subtitle}>{profile.email}</Text>
       </View>
 
       <View style={styles.form}>
         <Input
-          label="Full Name"
-          placeholder="Enter your full name"
-          value={profile.full_name}
-          onChangeText={(text) => setProfile({ ...profile, full_name: text })}
-          icon={User}
-          editable={editing}
-        />
-
-        <Input
           label="Username"
           placeholder="Enter your username"
-          value={profile.username}
-          onChangeText={(text) => setProfile({ ...profile, username: text })}
+          value={profile.userName}
+          onChangeText={(text) => setProfile({ ...profile, userName: text })}
           icon={User}
           editable={editing}
           autoCapitalize="none"

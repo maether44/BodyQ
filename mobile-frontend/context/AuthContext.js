@@ -1,65 +1,69 @@
-import React, { createContext, useState, useEffect, useContext } from "react";
-import { supabase } from "../services/supabase";
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { supabase }    from '../lib/supabase';
+import { getProfile }  from '../services/profileService';
 
-const AuthContext = createContext({});
+const AuthContext = createContext();
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+export function AuthProvider({ children }) {
+  const [user,      setUser]      = useState(null);
+  const [isNewUser, setIsNewUser] = useState(false);
+  const [loading,   setLoading]   = useState(true);
 
-  useEffect(() => {
-    // Check active session on mount
-    checkUser();
+  const resolveUser = async (sessionUser) => {
+    if (!sessionUser) {
+      setUser(null);
+      setIsNewUser(false);
+      setLoading(false);
+      return;
+    }
 
-    // Listen for auth changes
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log("Auth event:", event);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      },
-    );
+    setUser(sessionUser);
 
-    return () => {
-      authListener?.subscription?.unsubscribe();
-    };
-  }, []);
-
-  const checkUser = async () => {
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
-    } catch (error) {
-      console.error("Error checking user:", error);
+      const profile = await getProfile(sessionUser.id);
+      // New user = exists but hasn't completed onboarding yet
+      setIsNewUser(!profile?.goal);
+    } catch {
+      // Profile row doesn't exist yet — brand new signup
+      setIsNewUser(true);
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    // Check session on app launch
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      resolveUser(session?.user ?? null);
+    });
+
+    // Listen for sign in / sign out events
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_, session) => resolveUser(session?.user ?? null)
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const markOnboardingComplete = () => {
+    setIsNewUser(false);
+  };
+
   const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-      setUser(null);
-    } catch (error) {
-      console.error("Error signing out:", error);
-    }
+    await supabase.auth.signOut();
+    setUser(null);
+    setIsNewUser(false);
   };
 
-  const value = {
-    user,
-    loading,
-    signOut,
-  };
+  return (
+    <AuthContext.Provider value={{ user, isNewUser, loading, markOnboardingComplete, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
-};
+}

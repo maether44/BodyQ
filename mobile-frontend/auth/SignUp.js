@@ -1,82 +1,57 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   Pressable,
   Alert,
 } from "react-native";
 import { useForm, Controller } from "react-hook-form";
-import AuthLayout from "../components/AuthLayout";
-import Input from "../components/Input";
-import Button from "../components/Button";
-import { Mail, Lock, User, UserPlus } from "lucide-react-native";
 import { useNavigation } from "@react-navigation/native";
-import { supabase } from "../services/supabase";
+import { Mail, Lock, User, UserPlus } from "lucide-react-native";
+
+import AuthLayout from "../components/AuthLayout";
+import Input from "../components/register/Input";
+import Button from "../components/register/Button";
+import { useSignUp } from "../hooks/useSignUp";
 
 const SignUp = () => {
   const navigation = useNavigation();
+  const { handleSignUp, loading, error } = useSignUp();
+
   const {
     control,
     handleSubmit,
     watch,
     formState: { errors },
   } = useForm();
-  const [loading, setLoading] = useState(false);
 
   const password = watch("password");
 
   const onSubmit = async (data) => {
-    setLoading(true);
-
-    const { data: authData, error } = await supabase.auth.signUp({
+    const authData = await handleSignUp({
       email: data.email,
       password: data.password,
+      fullName: data.fullName,
     });
 
-    console.log("Auth Data:", authData);
-    console.log("Auth Error:", error);
-
-    if (error) {
-      setLoading(false);
-      Alert.alert("Error", error.message);
+    if (!authData) {
+      // error is already set in the hook, just show it
+      Alert.alert("Error", error);
       return;
     }
-
-    // Create profile in profiles table
-    if (authData.user) {
-      console.log("✅ User created with ID:", authData.user.id);
-
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .insert([
-          {
-            id: authData.user.id,
-            email: data.email,
-            username: data.fullName,
-          },
-        ])
-        .select();
-
-      if (profileError) {
-        console.error("❌ Profile creation error:", profileError);
-      } else {
-        console.log("✅ New profile created in database:", profileData);
-      }
-    }
-
-    setLoading(false);
 
     if (!authData.session) {
       Alert.alert(
         "Success!",
         "Please check your inbox for email verification.",
+        [{ text: "OK", onPress: () => navigation.navigate("SignIn") }],
       );
     } else {
-      Alert.alert("Success!", "Account created successfully!");
-      // Navigation will be handled automatically by AuthContext
+      Alert.alert("Success!", "Account created successfully!", [
+        { text: "OK", onPress: () => navigation.navigate("SignIn") },
+      ]);
     }
   };
 
@@ -94,10 +69,11 @@ const SignUp = () => {
         <View style={styles.form}>
           <Controller
             control={control}
+            name="fullName"
             rules={{ required: "Full Name is required" }}
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="Userame"
+                label="Username"
                 placeholder="Enter your full name"
                 value={value}
                 onChangeText={onChange}
@@ -107,11 +83,11 @@ const SignUp = () => {
                 error={errors.fullName?.message}
               />
             )}
-            name="fullName"
           />
 
           <Controller
             control={control}
+            name="email"
             rules={{
               required: "Email is required",
               pattern: {
@@ -131,11 +107,11 @@ const SignUp = () => {
                 error={errors.email?.message}
               />
             )}
-            name="email"
           />
 
           <Controller
             control={control}
+            name="password"
             rules={{
               required: "Password is required",
               minLength: {
@@ -156,11 +132,11 @@ const SignUp = () => {
                 error={errors.password?.message}
               />
             )}
-            name="password"
           />
 
           <Controller
             control={control}
+            name="confirmPassword"
             rules={{
               required: "Please confirm your password",
               validate: (value) =>
@@ -179,7 +155,6 @@ const SignUp = () => {
                 error={errors.confirmPassword?.message}
               />
             )}
-            name="confirmPassword"
           />
 
           <Button
@@ -202,14 +177,8 @@ const SignUp = () => {
 };
 
 const styles = StyleSheet.create({
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingVertical: 24,
-  },
-  header: {
-    marginBottom: 32,
-  },
+  scrollContent: { flexGrow: 1, justifyContent: "center", paddingVertical: 24 },
+  header: { marginBottom: 32 },
   title: {
     fontSize: 32,
     fontWeight: "bold",
@@ -219,23 +188,17 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    color: "rgba(255, 255, 255, 0.7)",
+    color: "rgba(255,255,255,0.7)",
     fontFamily: "Outfit-Regular",
   },
-  form: {
-    width: "100%",
-  },
+  form: { width: "100%" },
   footer: {
     flexDirection: "row",
     justifyContent: "center",
     marginTop: 24,
     marginBottom: 24,
   },
-  footerText: {
-    color: "white",
-    fontSize: 14,
-    fontFamily: "Outfit-Regular",
-  },
+  footerText: { color: "white", fontSize: 14, fontFamily: "Outfit-Regular" },
   link: {
     color: "#CDF27E",
     fontSize: 14,
