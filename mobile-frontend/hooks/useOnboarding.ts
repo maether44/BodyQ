@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Animated } from "react-native";
-import { generateAIPlan } from "../lib/grokAPI";
+import { generateAIPlan } from "../lib/groqAPI";
 import {
   calcBMR,
   calcTDEE,

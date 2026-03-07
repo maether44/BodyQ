@@ -46,12 +46,9 @@ const SignUp = () => {
       Alert.alert(
         "Success!",
         "Please check your inbox for email verification.",
-        [{ text: "OK", onPress: () => navigation.navigate("SignIn") }],
       );
     } else {
-      Alert.alert("Success!", "Account created successfully!", [
-        { text: "OK", onPress: () => navigation.navigate("SignIn") },
-      ]);
+      Alert.alert("Success!", "Account created successfully!");
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { View, StyleSheet, ActivityIndicator } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -28,6 +28,7 @@ import WorkoutActive from "./screens/workout/WorkoutActive";
 import WorkoutSummary from "./screens/workout/WorkoutSummary";
 import ExerciseInfo from "./screens/ExerciseInfo";
 import ExerciseCard from "./components/ExerciseCard";
+import AppTour from "./components/onBoarding/AppTour";
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
@@ -52,14 +53,13 @@ function Navigation() {
     );
   }
 
-
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!user ? (
         // Not logged in → auth screens
         <>
-          <Stack.Screen name="SignIn"  component={SignIn}  />
-          <Stack.Screen name="SignUp"  component={SignUp}  />
+          <Stack.Screen name="SignIn" component={SignIn} />
+          <Stack.Screen name="SignUp" component={SignUp} />
         </>
       ) : isNewUser ? (
         // Logged in but onboarding not done → onboarding
@@ -76,6 +76,7 @@ function Navigation() {
           <Stack.Screen name="WorkoutSummary" component={WorkoutSummary} />
           <Stack.Screen name="ExerciseCard" component={ExerciseCard} />
           <Stack.Screen name="ExerciseInfo" component={ExerciseInfo} />
+          <Stack.Screen name="AppTour" component={AppTour} />
         </>
       )}
     </Stack.Navigator>

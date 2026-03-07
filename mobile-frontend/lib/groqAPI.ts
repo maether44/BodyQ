@@ -114,3 +114,77 @@ export async function generateAIPlan(answers) {
   const text = data.choices?.[0]?.message?.content ?? "";
   return parseGroqResponse(text);
 }
+
+// ============================================
+// Yara chatbot assistant
+// ============================================
+
+function buildYaraSystem(profile) {
+  const base = `You are Yara, a warm and direct personal fitness and sports coach inside a mobile app.
+
+Your voice:
+- Conversational, human, coach-like. No AI stiffness.
+- Short paragraphs. Plain language. Like a coach texting back.
+- Never say "Great question!", "Certainly!", or "As an AI..."
+- Confident. Honest. Caring but no-fluff.
+
+Your expertise:
+- Fitness programming, progressive overload, exercise form
+- Nutrition, protein targets, macros, meal timing, hydration
+- Sports performance, recovery, sleep optimisation
+- Injury management (always refer to a physio for serious pain)
+- Motivation, consistency, mindset
+
+Rules:
+- Keep replies to 2-4 short paragraphs unless a detailed plan is requested.
+- NEVER ask the user for info that is already in their profile below.
+- Always reference their profile when giving advice.
+- Never give dangerous medical advice.`;
+
+  if (!profile) return base;
+
+  const goalMap = { fat_loss:'lose body fat', muscle:'build muscle', maintain:'stay healthy', athletic:'improve athletic performance' };
+  const injList = profile.injuries?.filter(x => x !== 'none').join(', ') || 'none';
+
+  return base + `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+USER PROFILE — memorise this, never ask for it again:
+• Goal: ${goalMap[profile.goal] || profile.goal}
+• Gender: ${profile.gender} | Age: ${profile.age} | Height: ${profile.height}cm | Weight: ${profile.weight}kg${profile.targetW ? ` | Target: ${profile.targetW}kg` : ''}
+• Experience: ${profile.experience}
+• Training: ${profile.days} days/week, ${profile.duration} min sessions, ${profile.timeOfDay} preferred
+• Equipment: ${profile.equipment}
+• Focus areas: ${profile.focus?.join(', ') || 'balanced'}
+• Injuries: ${injList}
+• Sleep: ${profile.sleep} | Stress: ${profile.stress} | Diet: ${profile.diet}
+• Daily calories: ${profile.calTarget} kcal | Protein: ${profile.protein}g
+• TDEE: ${profile.tdee} | BMR: ${profile.bmr}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use this to give precise, personalised advice every time.`;
+}
+
+
+// ── CHAT MESSAGE ──────────────────────────────────────────────────────────────
+export async function callYara(history, profile) {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model:      'llama-3.1-8b-instant',
+      max_tokens: 512,
+      messages: [
+        { role: 'system', content: buildYaraSystem(profile) },
+        ...history,
+      ],
+    }),
+  });
+
+  const body = await res.json();
+  if (!res.ok) throw new Error(JSON.stringify(body?.error ?? body));
+  return body.choices?.[0]?.message?.content
+    ?? "I'm having trouble connecting. Try again in a moment.";
+}

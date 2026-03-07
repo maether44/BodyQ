@@ -8,6 +8,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isNewUser, setIsNewUser] = useState();
   const [loading, setLoading] = useState(true);
+  const [shouldShowTour, setShouldShowTour] = useState(false);
 
   const resolveUser = async (sessionUser) => {
     if (!sessionUser) {
@@ -49,6 +50,7 @@ export function AuthProvider({ children }) {
 
   const markOnboardingComplete = () => {
     setIsNewUser(false);
+    setShouldShowTour(true); // Trigger tour after onboarding
   };
 
   const signOut = async () => {
@@ -60,7 +62,15 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isNewUser, loading, markOnboardingComplete, signOut }}
+      value={{
+        user,
+        isNewUser,
+        loading,
+        markOnboardingComplete,
+        signOut,
+        shouldShowTour,
+        setShouldShowTour,
+      }}
     >
       {children}
     </AuthContext.Provider>
