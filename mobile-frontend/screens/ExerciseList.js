@@ -1,0 +1,95 @@
+import { View, Text, FlatList, StyleSheet, ActivityIndicator,
+         TouchableOpacity, RefreshControl, TextInput } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { useExercises } from '../hooks/useExercises';
+import ExerciseCard    from '../components/ExerciseCard';
+
+const C = {
+  bg: '#0F0B1E', card: '#161230', border: '#1E1A35',
+  purple: '#7C5CFC', text: '#FFFFFF', sub: '#6B5F8A', red: '#FF3B30',
+};
+
+export default function ExerciseList() {
+  const navigation = useNavigation();
+  const { filtered, loading, refreshing, error, query, setQuery, onRefresh, retry } = useExercises();
+
+  if (loading) {
+    return (
+      <View style={s.center}>
+        <ActivityIndicator size="large" color={C.purple} />
+        <Text style={s.loadingText}>Loading exercises...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={s.center}>
+        <Ionicons name="alert-circle-outline" size={56} color={C.red} />
+        <Text style={s.errorText}>Error loading exercises</Text>
+        <Text style={s.errorMsg}>{error}</Text>
+        <TouchableOpacity style={s.retryBtn} onPress={retry}>
+          <Text style={s.retryTxt}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={s.container}>
+      <View style={s.header}>
+        <Text style={s.title}>Exercises</Text>
+        <Text style={s.subtitle}>{filtered.length} available</Text>
+      </View>
+
+      <View style={s.searchWrap}>
+        <Ionicons name="search" size={16} color={C.sub} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Search exercises..."
+          placeholderTextColor={C.sub}
+          value={query}
+          onChangeText={setQuery}
+        />
+      </View>
+
+      <FlatList
+        data={filtered}
+        keyExtractor={(item, i) => item.id || `${item.name}-${i}`}
+        renderItem={({ item }) => <ExerciseCard exercise={item} navigation={navigation} />}
+        contentContainerStyle={s.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.purple} />
+        }
+        ListEmptyComponent={
+          <View style={s.empty}>
+            <Ionicons name="barbell-outline" size={52} color={C.sub} />
+            <Text style={s.emptyText}>No exercises found</Text>
+            <Text style={s.emptySub}>Try another search term</Text>
+          </View>
+        }
+      />
+    </View>
+  );
+}
+
+const s = StyleSheet.create({
+  container:   { flex: 1, backgroundColor: C.bg },
+  header:      { paddingHorizontal: 16, paddingTop: 56, paddingBottom: 14 },
+  title:       { color: C.text, fontSize: 28, fontWeight: '800', letterSpacing: -0.4 },
+  subtitle:    { color: C.sub, fontSize: 12, marginTop: 4 },
+  searchWrap:  { marginHorizontal: 16, marginBottom: 12, backgroundColor: C.card, borderColor: C.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, height: 46, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  searchInput: { flex: 1, color: C.text, fontSize: 14 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 24 },
+  center:      { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg, padding: 20 },
+  loadingText: { marginTop: 10, color: C.sub, fontSize: 14 },
+  errorText:   { marginTop: 14, color: C.text, fontSize: 18, fontWeight: '700' },
+  errorMsg:    { marginTop: 8, color: C.sub, textAlign: 'center', fontSize: 13 },
+  retryBtn:    { marginTop: 16, backgroundColor: C.purple, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10 },
+  retryTxt:    { color: '#fff', fontWeight: '700', fontSize: 13 },
+  empty:       { alignItems: 'center', justifyContent: 'center', paddingVertical: 70 },
+  emptyText:   { marginTop: 12, color: C.text, fontSize: 16, fontWeight: '700' },
+  emptySub:    { marginTop: 4, color: C.sub, fontSize: 12 },
+});

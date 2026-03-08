@@ -3,6 +3,9 @@
 # dependencies
 node_modules/
 
+# APIs and environment variables
+
+
 # database URL
 .env
 .env*.local
