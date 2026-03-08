@@ -1,0 +1,76 @@
+├── .gitignore
+├── .vscode
+│   └── .react
+├── App.js
+├── app.json
+├── assets
+│   ├── android-icon-background.png
+│   ├── android-icon-foreground.png
+│   ├── android-icon-monochrome.png
+│   ├── favicon.png
+│   ├── icon.png
+│   └── splash-icon.png
+├── index.js
+├── package-lock.json
+├── package.json
+└── src
+    ├── components
+    │   ├── ai-assistant
+    │   │   └── YaraAssistant.js
+    │   ├── food-scanner
+    │   │   ├── BarcodeScanner.js
+    │   │   ├── FoodDetail.js
+    │   │   ├── FoodResultSheet.js
+    │   │   ├── foodScannerApi.js
+    │   │   ├── FoodScannerScreen.js
+    │   │   ├── PhotoAnalyser.js
+    │   │   └── useFoodScanner.js
+    │   ├── navigation
+    │   │   └── NavBar.js
+    │   ├── shared
+    │   │   ├── MacroBar.js
+    │   │   ├── RingProgress.js
+    │   │   └── StatCard.js
+    │   └── tour
+    │       ├── AppTour.js
+    │       └── tourRefs.js
+    ├── config
+    │   ├── supabase.js
+    │   └── theme.js
+    ├── constants
+    │   ├── colors.js
+    │   └── fonts.js
+    ├── hooks
+    │   ├── useActivity.js
+    │   ├── useAuth.js
+    │   ├── useFoodScanner.js
+    │   ├── useNutrition.js
+    │   ├── useProfile.js
+    │   └── useWorkout.js
+    ├── screens
+    │   ├── Home.js
+    │   ├── Insights.js
+    │   ├── nutrition
+    │   │   └── MealLogger.js
+    │   ├── Nutrition.js
+    │   ├── onboarding
+    │   │   ├── OnboardingBody.js
+    │   │   ├── OnboardingDone.js
+    │   │   └── OnboardingGoal.js
+    │   ├── PostureAI.js
+    │   ├── Profile.js
+    │   ├── sleep
+    │   │   └── SleepLog.js
+    │   ├── Training.js
+    │   └── workout
+    │       ├── WorkoutActive.js
+    │       └── WorkoutSummary.js
+    ├── services
+    │   ├── authService.js
+    │   ├── foodScannerApi.js
+    │   ├── nutritionService.js
+    │   └── workoutService.js
+    └── utils
+        ├── formatters.js
+        ├── healthScore.js
+        └── macroCalc.js
