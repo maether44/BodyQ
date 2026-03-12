@@ -328,6 +328,22 @@ export default function PostureAI({ navigation }) {
           ))}
         </View>
 
+        {/* Link to full training plan */}
+        <View style={s.card}>
+          <Text style={s.cardLabel}>TRAINING PLAN</Text>
+          <Text style={s.trainSub}>
+            Follow your weekly strength plan while BodyQ keeps your posture in
+            check.
+          </Text>
+          <TouchableOpacity
+            style={s.trainBtn}
+            onPress={() => navigation.navigate("Training")}
+            activeOpacity={0.85}
+          >
+            <Text style={s.trainBtnTxt}>Open Training Calendar</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={{ height: 90 }} />
       </ScrollView>
     </View>
@@ -560,4 +576,18 @@ const s = StyleSheet.create({
     paddingVertical: 5,
   },
   exSetsTxt: { color: C.accent, fontSize: 11, fontWeight: "600" },
+  trainSub: {
+    color: C.sub,
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  trainBtn: {
+    backgroundColor: C.purple,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  trainBtnTxt: { color: "#fff", fontSize: 14, fontWeight: "800" },
 });

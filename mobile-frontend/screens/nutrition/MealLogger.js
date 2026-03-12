@@ -22,11 +22,12 @@ const CATEGORIES = [
 ];
 
 export default function MealLogger({ route, navigation }) {
-  const { mealSlot = { label: "Lunch", icon: "☀️" } } = route?.params || {};
+  const { mealSlot = { label: "Lunch", icon: "☀️" }, initialTab = "search" } =
+    route?.params || {};
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [added, setAdded] = useState([]); // { food, qty }
-  const [tab, setTab] = useState("search"); // search | saved | added
+  const [tab, setTab] = useState(initialTab); // search | saved | added
 
   const filtered = useMemo(() => {
     return FOODS.filter((f) => {

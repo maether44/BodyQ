@@ -16,6 +16,7 @@ import {
   TODAY,
   WATER_TARGET_ML,
 } from "../data/mockUser";
+import { Ionicons } from "@expo/vector-icons";
 
 const C = {
   bg: "#0F0B1E",
@@ -51,6 +52,7 @@ export default function Nutrition({ navigation }) {
   const [waterMl, setWaterMl] = useState(TODAY.water.ml);
   const [tab, setTab] = useState("today"); // today | week
   const [animTrigger, setAnimTrigger] = useState(0);
+  const defaultMealSlot = { label: "Meal", icon: "🍽️" };
 
   useFocusEffect(
     useCallback(() => {
@@ -182,6 +184,43 @@ export default function Nutrition({ navigation }) {
         {/* ── MEALS ── */}
         <View style={s.card}>
           <Text style={s.cardLabel}>MEALS</Text>
+
+          {/* Quick tools */}
+          <View style={s.toolsRow}>
+            <TouchableOpacity
+              style={s.toolChip}
+              onPress={() =>
+                navigation.navigate("MealLogger", {
+                  mealSlot: defaultMealSlot,
+                  initialTab: "search",
+                })
+              }
+            >
+              <Ionicons name="search" size={14} color={C.lime} />
+              <Text style={s.toolChipTxt}>Search foods</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={s.toolChip}
+              onPress={() =>
+                navigation.navigate("MealLogger", {
+                  mealSlot: defaultMealSlot,
+                  initialTab: "saved",
+                })
+              }
+            >
+              <Ionicons name="star-outline" size={14} color={C.accent} />
+              <Text style={s.toolChipTxt}>Saved meals</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={s.toolChip}
+              onPress={() => navigation.navigate("FoodScanner")}
+            >
+              <Ionicons name="barcode-outline" size={14} color={C.purple} />
+              <Text style={s.toolChipTxt}>Scan</Text>
+            </TouchableOpacity>
+          </View>
           {MEAL_SLOTS.map((slot) => {
             const m = meals[slot.id];
             return (
@@ -295,6 +334,26 @@ const s = StyleSheet.create({
     letterSpacing: -0.5,
   },
   date: { color: C.sub, fontSize: 13 },
+  toolsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 10,
+  },
+  toolChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#1B1635",
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  toolChipTxt: { color: C.sub, fontSize: 11, fontWeight: "700" },
 
   tabRow: {
     flexDirection: "row",

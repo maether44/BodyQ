@@ -23,6 +23,8 @@ import NavBar from "./components/NavBar";
 import OnBoardingGoal from "./screens/OnBoardingGoal";
 import MealLogger from "./screens/nutrition/MealLogger";
 import FoodDetail from "./screens/nutrition/FoodDetail";
+import FoodScanner from "./screens/nutrition/FoodScanner";
+import Training from "./screens/Training";
 import SleepLog from "./screens/sleep/SleepLog";
 import WorkoutActive from "./screens/workout/WorkoutActive";
 import WorkoutSummary from "./screens/workout/WorkoutSummary";
@@ -70,8 +72,10 @@ function Navigation() {
         <>
           <Stack.Screen name="MainApp" component={NavBar} />
           <Stack.Screen name="Profile" component={Profile} />
+          <Stack.Screen name="Training" component={Training} />
           <Stack.Screen name="MealLogger" component={MealLogger} />
           <Stack.Screen name="FoodDetail" component={FoodDetail} />
+          <Stack.Screen name="FoodScanner" component={FoodScanner} />
           <Stack.Screen name="SleepLog" component={SleepLog} />
           <Stack.Screen name="WorkoutActive" component={WorkoutActive} />
           <Stack.Screen name="WorkoutSummary" component={WorkoutSummary} />

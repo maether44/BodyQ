@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Dashboard-BodyQ",
+    "slug": "dashboard-bodyq",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./mobile-frontend/assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./mobile-frontend/assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./mobile-frontend/assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./mobile-frontend/assets/favicon.png"
+    },
+    "entryPoint": "mobile-frontend/App.js"
+  }
+}

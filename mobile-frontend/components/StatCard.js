@@ -4,6 +4,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 
 export default function StatCard({
+  // New lightweight API (used by Food Scanner)
+  label,
+  sub,
+  color,
+  style,
+
+  // Legacy API
   title,
   value,
   unit,
@@ -11,6 +18,22 @@ export default function StatCard({
   gradient,
   percentage,
 }) {
+  // If no `gradient` is provided, render the lightweight card variant.
+  if (!gradient) {
+    return (
+      <View style={[mini.card, style, { borderColor: (color || "#7C5CFC") + "33" }]}>
+        <View style={mini.top}>
+          {!!icon && <Text style={[mini.emoji, { color: color || "#7C5CFC" }]}>{icon}</Text>}
+          <Text style={mini.label}>{label}</Text>
+        </View>
+        <Text style={[mini.value, { color: color || "#fff" }]} numberOfLines={1}>
+          {value}
+        </Text>
+        {!!sub && <Text style={mini.sub}>{sub}</Text>}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.cardContainer}>
       <LinearGradient
@@ -116,4 +139,24 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     fontWeight: "500",
   },
+});
+
+const mini = StyleSheet.create({
+  card: {
+    backgroundColor: "#161230",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+  },
+  top: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 8,
+  },
+  emoji: { fontSize: 14, fontWeight: "900" },
+  label: { flex: 1, color: "#6B5F8A", fontSize: 11, fontWeight: "800", letterSpacing: 0.6 },
+  value: { color: "#fff", fontSize: 18, fontWeight: "900" },
+  sub: { marginTop: 2, color: "#9D85F5", fontSize: 11, fontWeight: "700" },
 });

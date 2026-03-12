@@ -1,20 +1,17 @@
 import React, { useRef, useState } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { NavigationContainer } from "@react-navigation/native";
 import {
   Ionicons,
   MaterialCommunityIcons,
   AntDesign,
 } from "@expo/vector-icons";
-import { StyleSheet, View } from "react-native";
-import { Train } from "lucide-react-native";
+import { View } from "react-native";
 
 import Home from "../screens/Home";
 import ExerciseList from "../screens/ExerciseList";
 import Nutrition from "../screens/Nutrition";
 import PostureAI from "../screens/PostureAI";
 import Insights from "../screens/Insights";
-import Training from "../screens/Training";
 import AppTour from "./onBoarding/AppTour";
 import YaraAssistant from "./YaraAssistant";
 
@@ -110,11 +107,11 @@ export default function NavBar() {
         />
 
         <Tab.Screen
-          name="Calendar"
-          component={Training}
+          name="Insights"
+          component={Insights}
           options={{
             tabBarIcon: ({ color, size }) => (
-              <Ionicons name="calendar-outline" size={size} color={color} />
+              <Ionicons name="stats-chart" size={size} color={color} />
             ),
           }}
         />
