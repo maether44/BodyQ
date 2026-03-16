@@ -37,6 +37,8 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# windows
+*.bat
 
 # typescript
 *.tsbuildinfo
