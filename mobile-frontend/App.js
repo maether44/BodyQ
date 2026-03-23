@@ -15,43 +15,34 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { registerRootComponent } from "expo";
 
-// Auth (Zeineb's)
-import { supabase } from "./mobile-frontend/lib/supabase";
-import { AuthProvider, useAuth } from "./mobile-frontend/context/AuthContext";
-import SignIn from "./mobile-frontend/auth/SignIn";
-import SignUp from "./mobile-frontend/auth/SignUp";
-import OnBoardingGoal from "./mobile-frontend/screens/OnBoardingGoal";
-
-// Navigation & Layout (Zeineb's)
-import NavBar from "./mobile-frontend/components/NavBar";
-
-// Shared Screens - use Zeineb's versions as base
-import Profile from "./mobile-frontend/screens/Profile";
-import Nutrition from "./mobile-frontend/screens/Nutrition";
-import Training from "./mobile-frontend/screens/Training";
-import Insights from "./mobile-frontend/screens/Insights";
-import Home from "./mobile-frontend/screens/Home";
-import ExerciseInfo from "./mobile-frontend/screens/ExerciseInfo";
-import ExerciseCard from "./mobile-frontend/components/ExerciseCard";
-
-// Nutrition & Sleep & Workout (Zeineb's)
-import MealLogger from "./mobile-frontend/screens/nutrition/MealLogger";
-import FoodDetail from "./mobile-frontend/screens/nutrition/FoodDetail";
-import SleepLog from "./mobile-frontend/screens/sleep/SleepLog";
-import WorkoutActive from "./mobile-frontend/screens/workout/WorkoutActive";
-import WorkoutSummary from "./mobile-frontend/screens/workout/WorkoutSummary";
-
-// Your unique screens & components
-import FoodScannerScreen from "./src/components/food-scanner/FoodScannerScreen";
-import PostureAI from "./src/screens/PostureAI";
-import YaraAssistant from "./src/components/ai-assistant/YaraAssistant";
-import AppTour, { resetTour } from "./src/components/tour/AppTour";
+import { supabase } from "./lib/supabase";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import SignIn from "./auth/SignIn";
+import SignUp from "./auth/SignUp";
+import OnBoardingGoal from "./screens/OnBoardingGoal";
+import NavBar from "./components/NavBar";
+import Profile from "./screens/Profile";
+import Nutrition from "./screens/Nutrition";
+import Training from "./screens/Training";
+import Insights from "./screens/Insights";
+import Home from "./screens/Home";
+import ExerciseInfo from "./screens/ExerciseInfo";
+import ExerciseCard from "./components/ExerciseCard";
+import MealLogger from "./screens/nutrition/MealLogger";
+import FoodDetail from "./screens/nutrition/FoodDetail";
+import SleepLog from "./screens/sleep/SleepLog";
+import WorkoutActive from "./screens/workout/WorkoutActive";
+import WorkoutSummary from "./screens/workout/WorkoutSummary";
+import PostureAI from "./screens/PostureAI";
+import FoodScannerScreen from "./components/food-scanner/FoodScannerScreen";
+import YaraAssistant from "./components/YaraAssistant";
+import AppTour, { resetTour } from "./components/onBoarding/AppTour";
 
 SplashScreen.preventAutoHideAsync();
 
 const Stack = createStackNavigator();
 
-function Navigation({ userProfile }) {
+function Navigation() {
   const { user, isNewUser, loading } = useAuth();
 
   if (loading) {
@@ -65,16 +56,13 @@ function Navigation({ userProfile }) {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!user ? (
-        // Not logged in → auth screens
         <>
           <Stack.Screen name="SignIn" component={SignIn} />
           <Stack.Screen name="SignUp" component={SignUp} />
         </>
       ) : isNewUser ? (
-        // Onboarding
         <Stack.Screen name="OnBoarding" component={OnBoardingGoal} />
       ) : (
-        // Main app
         <>
           <Stack.Screen name="MainApp" component={NavBar} />
           <Stack.Screen name="Home" component={Home} />
@@ -89,7 +77,6 @@ function Navigation({ userProfile }) {
           <Stack.Screen name="WorkoutSummary" component={WorkoutSummary} />
           <Stack.Screen name="ExerciseCard" component={ExerciseCard} />
           <Stack.Screen name="ExerciseInfo" component={ExerciseInfo} />
-          {/* Your unique screens */}
           <Stack.Screen name="PostureAI" component={PostureAI} />
           <Stack.Screen name="FoodScanner" component={FoodScannerScreen} />
         </>
@@ -115,27 +102,20 @@ export default function App() {
           "Inter-Regular": Inter_400Regular,
           "Inter-SemiBold": Inter_600SemiBold,
         });
-
         const { data, error } = await supabase.auth.getSession();
-        if (error) {
-          console.log("Supabase connection error:", error.message);
-        } else {
-          console.log("Successfully connected to Supabase!");
-        }
+        if (error) console.log("Supabase error:", error.message);
+        else console.log("Supabase connected!");
       } catch (e) {
         console.warn(e);
       } finally {
         setAppIsReady(true);
       }
     }
-
     prepare();
   }, []);
 
   const onLayoutRootView = useCallback(async () => {
-    if (appIsReady) {
-      await SplashScreen.hideAsync();
-    }
+    if (appIsReady) await SplashScreen.hideAsync();
   }, [appIsReady]);
 
   if (!appIsReady) return null;
@@ -151,9 +131,8 @@ export default function App() {
         <View style={styles.container} onLayout={onLayoutRootView}>
           <StatusBar style="auto" />
           <NavigationContainer>
-            <Navigation userProfile={userProfile} />
+            <Navigation />
           </NavigationContainer>
-          {/* Your unique floating components */}
           <YaraAssistant userProfile={userProfile} />
           <AppTour
             key={tourKey}
