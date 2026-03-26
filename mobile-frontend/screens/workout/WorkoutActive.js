@@ -1,295 +1,213 @@
-/**
- * src/screens/workout/WorkoutActive.js
- * No mock data — exercise name/muscle come from the workout object passed in.
- * Workout sessions saved to Supabase via useWorkouts hook.
- */
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
-  Animated, ScrollView, StatusBar,
-  StyleSheet, Text, TouchableOpacity, View,
+  View, StyleSheet, TouchableOpacity, Text,
+  StatusBar, ActivityIndicator, Alert,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
+import { Camera } from 'expo-camera';
+import { Asset } from 'expo-asset';
+import { Ionicons } from '@expo/vector-icons';
 
-function fmtTime(sec) {
-  const m = Math.floor(sec / 60).toString().padStart(2, '0');
-  const s = (sec % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
+// Maps exercise name keywords → camelCase keys used in ai_coach.html
+function resolveHtmlKey(name) {
+  const k = name.trim().toLowerCase();
+  if (k.includes('push') || k.includes('bench')) return 'pushup';
+  if (k.includes('squat'))                        return 'squat';
+  if (k.includes('curl'))                         return 'bicepCurl';
+  if (k.includes('press'))                        return 'shoulderPress';
+  if (k.includes('deadlift') || k.includes('rdl')) return 'deadlift';
+  if (k.includes('lunge'))                        return 'lunge';
+  if (k.includes('plank'))                        return 'plank';
+  return null;
 }
 
-// ── Rest Timer Overlay ────────────────────────────────────────────────────────
-function RestTimer({ seconds, onSkip }) {
-  const [remaining, setRemaining] = useState(seconds);
-  const scale = useRef(new Animated.Value(1)).current;
+export default function WorkoutActive({ route, navigation }) {
+  const rawKey  = route.params?.exerciseKey || route.params?.exerciseName || 'squat';
+  const htmlKey = resolveHtmlKey(rawKey);
+  const displayName = rawKey.replace(/_/g, ' ').toUpperCase();
 
+  const webViewRef    = useRef(null);
+  const startTimeRef  = useRef(Date.now());
+
+  const [hasPermission, setHasPermission] = useState(null);
+  const [htmlContent,   setHtmlContent]   = useState(null);
+  const [cue,           setCue]           = useState('Waiting for AI...');
+  const [repCount,      setRepCount]      = useState(0);
+
+  // ── Hide tab bar while active ──────────────────────────────
   useEffect(() => {
-    if (remaining <= 0) { onSkip(); return; }
-    const t = setTimeout(() => setRemaining(p => p - 1), 1000);
-    return () => clearTimeout(t);
-  }, [remaining]);
+    navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
+    return () => navigation.getParent()?.setOptions({
+      tabBarStyle: { backgroundColor: '#0F0B1E', borderTopColor: '#1E1A35', height: 85, paddingBottom: 20 },
+    });
+  }, [navigation]);
 
+  // ── Camera permission + HTML load ─────────────────────────
   useEffect(() => {
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 1.15, duration: 100, useNativeDriver: true }),
-      Animated.timing(scale, { toValue: 1,    duration: 100, useNativeDriver: true }),
-    ]).start();
-  }, [remaining]);
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setHasPermission(status === 'granted');
+      try {
+        const asset = Asset.fromModule(require('../../assets/ai_coach.html'));
+        await asset.downloadAsync();
+        const res  = await fetch(asset.localUri || asset.uri);
+        const text = await res.text();
+        setHtmlContent(text);
+      } catch (err) {
+        console.error('[BodyQ] HTML Load Error:', err);
+        Alert.alert('Engine Error', 'Could not initialize the AI Engine.');
+      }
+    })();
+  }, []);
 
-  const pct   = remaining / seconds;
-  const color = remaining <= 5 ? '#FF6B6B' : remaining <= 15 ? '#FFB830' : '#34C759';
+  // ── Receive messages from WebView ────────────────────────
+  const onMessage = useCallback((e) => {
+    const data = e.nativeEvent.data;
+
+    // AI engine is live — now safe to inject the exercise key
+    if (data === 'AI_READY') {
+      if (htmlKey) {
+        webViewRef.current?.injectJavaScript(
+          `window.applyExerciseChange && window.applyExerciseChange('${htmlKey}'); true;`
+        );
+      }
+      return;
+    }
+
+    try {
+      const msg = JSON.parse(data);
+      if (msg.type === 'cue')        setCue(msg.text);
+      if (msg.type === 'rep')        setRepCount(msg.count);
+      if (msg.type === 'sessionEnd') {
+        const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        navigation.replace('WorkoutSummary', {
+          exerciseName: displayName,
+          repCount:     msg.repCount,
+          formScore:    msg.formScore,
+          elapsed,
+        });
+      }
+    } catch (_) {}
+  }, [navigation, displayName, htmlKey]);
+
+  // ── Finish button: ask HTML for final state ───────────────
+  const handleFinish = useCallback(() => {
+    webViewRef.current?.injectJavaScript(
+      `if (window.getSessionState) window.getSessionState(); true;`
+    );
+  }, []);
+
+  // ── Unsupported exercise ──────────────────────────────────
+  if (htmlKey === null) {
+    return (
+      <View style={[s.container, s.center]}>
+        <StatusBar hidden />
+        <Text style={s.unsupportedIcon}>🤖</Text>
+        <Text style={s.unsupportedTitle}>AI Tracking Unavailable</Text>
+        <Text style={s.unsupportedSub}>
+          AI Form Tracking is not yet available for this exercise.{'\n'}Use manual timer?
+        </Text>
+        <TouchableOpacity style={s.backLink} onPress={() => navigation.goBack()}>
+          <Text style={s.backLinkTxt}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (hasPermission === false) {
+    return (
+      <View style={[s.container, s.center]}>
+        <StatusBar hidden />
+        <Text style={s.error}>Camera Permission Denied</Text>
+        <TouchableOpacity style={s.backLink} onPress={() => navigation.goBack()}>
+          <Text style={s.backLinkTxt}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
-    <View style={rst.overlay}>
-      <View style={rst.card}>
-        <Text style={rst.title}>Rest</Text>
-        <Animated.Text style={[rst.time, { color, transform: [{ scale }] }]}>
-          {fmtTime(remaining)}
-        </Animated.Text>
-        <View style={rst.barBg}>
-          <View style={[rst.barFill, { width: `${pct * 100}%`, backgroundColor: color }]} />
+    <View style={s.container}>
+      <StatusBar hidden />
+
+      {/* Full-screen WebView */}
+      {!htmlContent ? (
+        <View style={[s.container, s.center]}>
+          <ActivityIndicator size="large" color="#C8F135" />
+          <Text style={s.loaderTxt}>LOADING AI ENGINE...</Text>
         </View>
-        <TouchableOpacity style={rst.skipBtn} onPress={onSkip}>
-          <Text style={rst.skipText}>Skip Rest →</Text>
+      ) : (
+        <WebView
+          ref={webViewRef}
+          originWhitelist={['*']}
+          source={{ html: htmlContent, baseUrl: 'https://localhost' }}
+          style={s.webview}
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
+          startInLoadingState={true}
+          onPermissionRequest={(event) => event.grant(event.resources)}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          onMessage={onMessage}
+        />
+      )}
+
+      {/* ── TOP HUD ── */}
+      <View style={s.topOverlay}>
+        <TouchableOpacity style={s.closeBtn} onPress={() => navigation.goBack()}>
+          <Ionicons name="close" size={22} color="#000" />
+        </TouchableOpacity>
+
+        <View style={s.titleWrap}>
+          <Text style={s.exerciseTitle}>{displayName}</Text>
+        </View>
+
+        <View style={s.repBadge}>
+          <Text style={s.repNum}>{repCount}</Text>
+          <Text style={s.repLabel}>REPS</Text>
+        </View>
+      </View>
+
+      {/* ── BOTTOM HUD ── */}
+      <View style={s.bottomOverlay}>
+        <View style={s.cueRow}>
+          <Ionicons name="sparkles" size={14} color="#C8F135" style={{ marginRight: 8 }} />
+          <Text style={s.cueText} numberOfLines={2}>{cue}</Text>
+        </View>
+        <TouchableOpacity style={s.finishBtn} onPress={handleFinish}>
+          <Text style={s.finishBtnTxt}>Finish</Text>
+          <Ionicons name="checkmark" size={16} color="#000" />
         </TouchableOpacity>
       </View>
     </View>
   );
 }
 
-const rst = StyleSheet.create({
-  overlay: { position:'absolute', top:0, left:0, right:0, bottom:0, backgroundColor:'rgba(15,11,30,0.95)', alignItems:'center', justifyContent:'center', zIndex:100 },
-  card:    { backgroundColor:'#181430', borderRadius:28, padding:40, alignItems:'center', width:'85%', borderWidth:1, borderColor:'#251E42' },
-  title:   { color:'#6B5F8A', fontSize:14, fontWeight:'700', letterSpacing:1, marginBottom:12 },
-  time:    { fontSize:72, fontWeight:'900', letterSpacing:-2 },
-  barBg:   { width:'100%', height:6, backgroundColor:'#251E42', borderRadius:3, overflow:'hidden', marginTop:24, marginBottom:28 },
-  barFill: { height:6, borderRadius:3 },
-  skipBtn: { backgroundColor:'#251E42', borderRadius:12, paddingHorizontal:24, paddingVertical:12 },
-  skipText:{ color:'#9D85F5', fontSize:14, fontWeight:'700' },
-});
+const s = StyleSheet.create({
+  container:       { flex: 1, backgroundColor: '#000' },
+  center:          { justifyContent: 'center', alignItems: 'center' },
+  webview:         { flex: 1, backgroundColor: '#000', margin: 0, padding: 0 },
+  loaderTxt:       { color: '#C8F135', marginTop: 15, fontWeight: '900', letterSpacing: 2 },
+  error:           { color: '#FF3B30', fontWeight: '800', fontSize: 16 },
+  backLink:        { marginTop: 20, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#C8F135' },
+  backLinkTxt:     { color: '#C8F135', fontWeight: '700' },
+  unsupportedIcon: { fontSize: 52, marginBottom: 16 },
+  unsupportedTitle:{ color: '#FFF', fontSize: 20, fontWeight: '900', marginBottom: 10 },
+  unsupportedSub:  { color: '#6B5F8A', fontSize: 14, textAlign: 'center', lineHeight: 22, paddingHorizontal: 30 },
 
-// ── Set Row ───────────────────────────────────────────────────────────────────
-function SetRow({ setNum, repsTarget, done, onDone }) {
-  const [reps, setReps] = useState(repsTarget);
-  return (
-    <View style={[sr.row, done && sr.rowDone]}>
-      <Text style={sr.setNum}>Set {setNum}</Text>
-      <View style={sr.repsControl}>
-        <TouchableOpacity style={sr.adjBtn} onPress={() => setReps(p => Math.max(1, p - 1))} disabled={done}>
-          <Text style={sr.adjTxt}>−</Text>
-        </TouchableOpacity>
-        <Text style={sr.repsNum}>{reps}</Text>
-        <TouchableOpacity style={sr.adjBtn} onPress={() => setReps(p => p + 1)} disabled={done}>
-          <Text style={sr.adjTxt}>+</Text>
-        </TouchableOpacity>
-      </View>
-      <Text style={sr.repsLabel}>reps</Text>
-      <TouchableOpacity style={[sr.doneBtn, done && sr.doneBtnDone]} onPress={() => onDone(reps)} disabled={done}>
-        <Text style={sr.doneBtnTxt}>{done ? '✓' : 'Done'}</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
+  // Top overlay
+  topOverlay:   { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: 56, paddingHorizontal: 20, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 20 },
+  closeBtn:     { width: 44, height: 44, backgroundColor: '#C8F135', borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  titleWrap:    { flex: 1, alignItems: 'center' },
+  exerciseTitle:{ color: '#C8F135', fontSize: 22, fontWeight: '900', letterSpacing: 1.5, textShadowColor: 'rgba(200,241,53,0.4)', textShadowRadius: 10 },
+  repBadge:     { alignItems: 'center', minWidth: 44 },
+  repNum:       { color: '#C8F135', fontSize: 26, fontWeight: '900', lineHeight: 28 },
+  repLabel:     { color: 'rgba(200,241,53,0.6)', fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
 
-const sr = StyleSheet.create({
-  row:        { flexDirection:'row', alignItems:'center', paddingVertical:12, gap:12, borderBottomWidth:1, borderBottomColor:'#251E42' },
-  rowDone:    { opacity:0.5 },
-  setNum:     { color:'#6B5F8A', fontSize:13, fontWeight:'600', width:44 },
-  repsControl:{ flexDirection:'row', alignItems:'center', gap:10 },
-  adjBtn:     { width:30, height:30, borderRadius:8, backgroundColor:'#251E42', alignItems:'center', justifyContent:'center' },
-  adjTxt:     { color:'#9D85F5', fontSize:18, fontWeight:'800' },
-  repsNum:    { color:'#fff', fontSize:20, fontWeight:'800', width:36, textAlign:'center' },
-  repsLabel:  { color:'#6B5F8A', fontSize:12, flex:1 },
-  doneBtn:    { backgroundColor:'#251E42', borderRadius:10, paddingHorizontal:14, paddingVertical:8 },
-  doneBtnDone:{ backgroundColor:'#34C75920' },
-  doneBtnTxt: { color:'#9D85F5', fontSize:13, fontWeight:'700' },
-});
-
-// ── Main Screen ───────────────────────────────────────────────────────────────
-export default function WorkoutActive({ workout, onFinish }) {
-  const WK = workout || {
-    name: 'Upper Body Strength',
-    estimatedCalories: 380,
-    exercises: [
-      { id:'bench_press', name:'Bench Press',    muscle:'Chest',     sets:3, reps:10, restSec:90 },
-      { id:'row',         name:'Barbell Row',    muscle:'Back',      sets:3, reps:12, restSec:60 },
-      { id:'ohp',         name:'Overhead Press', muscle:'Shoulders', sets:3, reps:10, restSec:60 },
-      { id:'bicep_curl',  name:'Bicep Curl',     muscle:'Biceps',    sets:3, reps:15, restSec:45 },
-      { id:'tricep_push', name:'Tricep Push',    muscle:'Triceps',   sets:3, reps:15, restSec:45 },
-    ],
-  };
-
-  const [elapsed,    setElapsed]   = useState(0);
-  const [currentEx,  setCurrentEx] = useState(0);
-  const [setStatus,  setSetStatus] = useState(
-    Object.fromEntries(WK.exercises.map((ex, i) => [
-      i, Object.fromEntries(Array.from({ length: ex.sets }, (_, s) => [s, { done: false, reps: ex.reps }]))
-    ]))
-  );
-  const [resting,  setResting]  = useState(false);
-  const [restSecs, setRestSecs] = useState(0);
-  const [finished, setFinished] = useState(false);
-
-  useEffect(() => {
-    if (finished) return;
-    const t = setInterval(() => setElapsed(p => p + 1), 1000);
-    return () => clearInterval(t);
-  }, [finished]);
-
-  const handleSetDone = (exIdx, setIdx, reps) => {
-    setSetStatus(prev => ({
-      ...prev,
-      [exIdx]: { ...prev[exIdx], [setIdx]: { done: true, reps } },
-    }));
-    setRestSecs(WK.exercises[exIdx].restSec || 60);
-    setResting(true);
-  };
-
-  const allDone = WK.exercises.every((_, i) =>
-    Object.values(setStatus[i]).every(s => s.done)
-  );
-  const completedSets = Object.values(setStatus).reduce(
-    (acc, ex) => acc + Object.values(ex).filter(s => s.done).length, 0
-  );
-  const totalSets = WK.exercises.reduce((a, ex) => a + ex.sets, 0);
-  const ex = WK.exercises[currentEx];
-
-  return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" />
-
-      {resting && <RestTimer seconds={restSecs} onSkip={() => setResting(false)} />}
-
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.workoutName}>{WK.name}</Text>
-          <Text style={styles.timerText}>{fmtTime(elapsed)}</Text>
-        </View>
-        <View style={styles.headerRight}>
-          <Text style={styles.setsProgress}>{completedSets}/{totalSets} sets</Text>
-          {!finished && (
-            <TouchableOpacity style={styles.finishBtn} onPress={() => setFinished(true)}>
-              <Text style={styles.finishBtnTxt}>Finish</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      <View style={styles.progressBg}>
-        <View style={[styles.progressFill, { width:`${(completedSets / totalSets) * 100}%` }]} />
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
-        {/* Exercise tabs */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.exTabsScroll}>
-          <View style={styles.exTabs}>
-            {WK.exercises.map((exItem, i) => {
-              const exDone = Object.values(setStatus[i]).every(s => s.done);
-              return (
-                <TouchableOpacity
-                  key={i}
-                  style={[styles.exTab, currentEx===i && styles.exTabActive, exDone && styles.exTabDone]}
-                  onPress={() => setCurrentEx(i)}
-                >
-                  <Text style={[styles.exTabTxt, currentEx===i && styles.exTabTxtActive]}>
-                    {exDone ? '✓ ' : ''}{(exItem.name || exItem.id).split(' ')[0]}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </ScrollView>
-
-        {/* Current exercise card */}
-        <View style={styles.exerciseCard}>
-          <View style={styles.exerciseHeader}>
-            <View>
-              <Text style={styles.exerciseName}>{ex.name || ex.id}</Text>
-              <Text style={styles.exerciseMuscle}>{ex.muscle || ''}</Text>
-            </View>
-            <View style={styles.exercisePills}>
-              <View style={styles.pill}><Text style={styles.pillTxt}>{ex.sets} sets</Text></View>
-              <View style={styles.pill}><Text style={styles.pillTxt}>{ex.reps} reps</Text></View>
-              {ex.restSec > 0 && <View style={styles.pill}><Text style={styles.pillTxt}>{ex.restSec}s rest</Text></View>}
-            </View>
-          </View>
-
-          {Array.from({ length: ex.sets }).map((_, setIdx) => (
-            <SetRow
-              key={setIdx}
-              setNum={setIdx + 1}
-              repsTarget={ex.reps}
-              done={setStatus[currentEx][setIdx].done}
-              onDone={(reps) => handleSetDone(currentEx, setIdx, reps)}
-            />
-          ))}
-        </View>
-
-        {/* Navigation */}
-        <View style={styles.navRow}>
-          <TouchableOpacity
-            style={[styles.navBtn, currentEx===0 && styles.navBtnDisabled]}
-            onPress={() => setCurrentEx(p => Math.max(0, p-1))}
-            disabled={currentEx===0}
-          >
-            <Text style={styles.navBtnTxt}>← Prev</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.navBtn, styles.navBtnNext, currentEx===WK.exercises.length-1 && styles.navBtnDisabled]}
-            onPress={() => setCurrentEx(p => Math.min(WK.exercises.length-1, p+1))}
-            disabled={currentEx===WK.exercises.length-1}
-          >
-            <Text style={[styles.navBtnTxt, { color:'#fff' }]}>Next →</Text>
-          </TouchableOpacity>
-        </View>
-
-        {allDone && (
-          <TouchableOpacity
-            style={styles.completeBtn}
-            onPress={() => onFinish && onFinish({ elapsed, completedSets, totalSets })}
-          >
-            <Text style={styles.completeBtnTxt}>🏆  Complete Workout</Text>
-          </TouchableOpacity>
-        )}
-
-        <View style={{ height:32 }} />
-      </ScrollView>
-    </View>
-  );
-}
-
-const C = { bg:'#0F0B1E', card:'#181430', border:'#251E42', purple:'#7C5CFC', lime:'#C8F135', sub:'#6B5F8A', text:'#fff', accent:'#9D85F5' };
-
-const styles = StyleSheet.create({
-  root:   { flex:1, backgroundColor:C.bg },
-  header: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', paddingHorizontal:20, paddingTop:54, paddingBottom:14 },
-  workoutName:  { color:C.text, fontSize:18, fontWeight:'800' },
-  timerText:    { color:C.lime, fontSize:28, fontWeight:'900', letterSpacing:-1, marginTop:2 },
-  headerRight:  { alignItems:'flex-end', gap:8 },
-  setsProgress: { color:C.sub, fontSize:13 },
-  finishBtn:    { backgroundColor:C.border, borderRadius:10, paddingHorizontal:14, paddingVertical:7 },
-  finishBtnTxt: { color:C.accent, fontSize:13, fontWeight:'700' },
-  progressBg:   { height:3, backgroundColor:C.border, marginHorizontal:20 },
-  progressFill: { height:3, backgroundColor:C.purple },
-  scroll:       { paddingHorizontal:16, paddingTop:16 },
-  exTabsScroll: { marginBottom:16 },
-  exTabs:       { flexDirection:'row', gap:8, paddingHorizontal:4 },
-  exTab:        { paddingHorizontal:14, paddingVertical:8, backgroundColor:C.card, borderRadius:20, borderWidth:1, borderColor:C.border },
-  exTabActive:  { backgroundColor:C.purple, borderColor:C.purple },
-  exTabDone:    { backgroundColor:'#34C75920', borderColor:'#34C75950' },
-  exTabTxt:     { color:C.sub, fontSize:12, fontWeight:'600' },
-  exTabTxtActive:{ color:'#fff' },
-  exerciseCard: { backgroundColor:C.card, borderRadius:20, padding:18, borderWidth:1, borderColor:C.border, marginBottom:16 },
-  exerciseHeader:{ marginBottom:16 },
-  exerciseName: { color:C.text, fontSize:20, fontWeight:'800' },
-  exerciseMuscle:{ color:C.sub, fontSize:12, marginTop:4 },
-  exercisePills: { flexDirection:'row', gap:8, marginTop:12 },
-  pill:          { backgroundColor:C.border, borderRadius:8, paddingHorizontal:10, paddingVertical:5 },
-  pillTxt:       { color:C.accent, fontSize:12, fontWeight:'600' },
-  navRow:        { flexDirection:'row', gap:12, marginBottom:16 },
-  navBtn:        { flex:1, backgroundColor:C.card, borderRadius:14, paddingVertical:14, alignItems:'center', borderWidth:1, borderColor:C.border },
-  navBtnNext:    { backgroundColor:C.purple, borderColor:C.purple },
-  navBtnDisabled:{ opacity:0.3 },
-  navBtnTxt:     { color:C.sub, fontSize:14, fontWeight:'700' },
-  completeBtn:   { backgroundColor:'#34C759', borderRadius:16, paddingVertical:18, alignItems:'center', marginBottom:12 },
-  completeBtnTxt:{ color:'#fff', fontSize:16, fontWeight:'800' },
+  // Bottom overlay
+  bottomOverlay:{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 20, paddingVertical: 18, paddingBottom: 36, flexDirection: 'row', alignItems: 'center', zIndex: 20 },
+  cueRow:       { flex: 1, flexDirection: 'row', alignItems: 'center', paddingRight: 12 },
+  cueText:      { color: '#FFFFFF', fontSize: 14, fontWeight: '600', lineHeight: 20, flex: 1 },
+  finishBtn:    { backgroundColor: '#C8F135', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  finishBtnTxt: { color: '#000', fontWeight: '900', fontSize: 14 },
 });

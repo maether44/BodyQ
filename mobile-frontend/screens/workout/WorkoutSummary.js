@@ -23,16 +23,19 @@ function StatBox({ label, value, unit, color = '#9D85F5' }) {
   );
 }
 
-export default function WorkoutSummary({ result, workoutName, onHome, onGoAgain }) {
-  // Default mock result if none passed
+export default function WorkoutSummary({ route, result, workoutName, onHome, onGoAgain }) {
+  // Accept data from navigation.replace() or direct props
+  const params = route?.params || {};
   const R = result || {
-    elapsed: 2820,       // 47 min
-    completedSets: 15,
-    totalSets: 15,
-    caloriesBurned: 390,
-    newPRs: [{ exercise: 'Bench Press', value: '90 kg' }],
-    xpEarned: 80,
+    elapsed:       params.elapsed       ?? 2820,
+    completedSets: params.repCount      ?? 15,
+    totalSets:     params.repCount      ?? 15,
+    caloriesBurned:Math.round((params.elapsed ?? 2820) / 60 * 8),
+    formScore:     params.formScore     ?? null,
+    newPRs:        [],
+    xpEarned:      Math.min(100, (params.repCount ?? 15) * 5),
   };
+  const resolvedName = workoutName || params.exerciseName || 'Workout';
 
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim  = useRef(new Animated.Value(0)).current;
@@ -58,7 +61,7 @@ export default function WorkoutSummary({ result, workoutName, onHome, onGoAgain 
 
         <Animated.View style={{ opacity: fadeAnim }}>
           <Text style={styles.title}>Workout Complete!</Text>
-          <Text style={styles.workoutName}>{workoutName || 'Upper Body Strength'}</Text>
+          <Text style={styles.workoutName}>{resolvedName}</Text>
 
           {/* Main stats */}
           <View style={styles.statsRow}>
