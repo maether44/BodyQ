@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, Dimensions,
@@ -6,6 +6,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import Svg, { Ellipse, Rect, Circle, Path } from 'react-native-svg';
+import { supabase } from '../lib/supabase';
+import { getMuscleFatigue } from '../services/workoutService';
 
 const { width } = Dimensions.get('window');
 
@@ -29,15 +32,9 @@ const SHADOW = {
   elevation: 8,
 };
 
-// ── Static data (replace with real user data later) ─────────────
+// ── Static data ──────────────────────────────────────────────
 const WEEK = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-const DONE_DAYS = new Set([0, 1, 2, 4]); // Mon Tue Wed Fri
-
-const MUSCLES = [
-  { name: 'Chest',  pct: 72, color: C.purple },
-  { name: 'Quads',  pct: 55, color: C.lime   },
-  { name: 'Biceps', pct: 38, color: C.accent  },
-];
+const DONE_DAYS = new Set([0, 1, 2, 4]);
 
 const QUICK_ACTIONS = [
   { icon: 'search',            label: 'Library',   screen: 'ExerciseList' },
@@ -45,6 +42,101 @@ const QUICK_ACTIONS = [
   { icon: 'analytics-outline', label: 'Progress',  screen: 'Insights'     },
 ];
 
+// ── Fatigue → color / label ──────────────────────────────────
+function fatigueColor(pct) {
+  if (pct >= 70) return '#7C5CFC'; // Electric Violet — Fatigued
+  if (pct >= 40) return '#FF9500'; // Amber — Sore
+  return '#C8F135';                // Neon Lime — Fresh
+}
+function fatigueLabel(pct) {
+  if (pct >= 70) return 'FATIGUED';
+  if (pct >= 40) return 'SORE';
+  return 'FRESH';
+}
+const UNTRAINED = 'rgba(255,255,255,0.07)';
+
+// ── SVG body muscle spots ────────────────────────────────────
+// Each entry: muscle id (matches Supabase muscle_name), cx, cy, rx, ry
+const BODY_SPOTS = [
+  { id: 'Shoulders', cx: 17,  cy: 52,  rx: 11, ry: 9  },
+  { id: 'Shoulders', cx: 103, cy: 52,  rx: 11, ry: 9  },
+  { id: 'Chest',     cx: 60,  cy: 64,  rx: 22, ry: 16 },
+  { id: 'Biceps',    cx: 15,  cy: 80,  rx: 8,  ry: 14 },
+  { id: 'Biceps',    cx: 105, cy: 80,  rx: 8,  ry: 14 },
+  { id: 'Triceps',   cx: 13,  cy: 93,  rx: 7,  ry: 10 },
+  { id: 'Triceps',   cx: 107, cy: 93,  rx: 7,  ry: 10 },
+  { id: 'Forearms',  cx: 14,  cy: 118, rx: 6,  ry: 12 },
+  { id: 'Forearms',  cx: 106, cy: 118, rx: 6,  ry: 12 },
+  { id: 'Core',      cx: 60,  cy: 98,  rx: 17, ry: 22 },
+  { id: 'Glutes',    cx: 42,  cy: 137, rx: 13, ry: 10 },
+  { id: 'Glutes',    cx: 78,  cy: 137, rx: 13, ry: 10 },
+  { id: 'Quads',     cx: 42,  cy: 162, rx: 12, ry: 22 },
+  { id: 'Quads',     cx: 78,  cy: 162, rx: 12, ry: 22 },
+  { id: 'Hamstrings',cx: 42,  cy: 185, rx: 11, ry: 12 },
+  { id: 'Hamstrings',cx: 78,  cy: 185, rx: 11, ry: 12 },
+  { id: 'Back',      cx: 60,  cy: 78,  rx: 20, ry: 20 }, // shown as subtle overlay on torso back
+];
+
+// ── Body Silhouette SVG Component ────────────────────────────
+function BodySilhouette({ fatigueMap }) {
+  const colorOf = (muscleId) => {
+    const entry = fatigueMap[muscleId];
+    if (!entry) return UNTRAINED;
+    return fatigueColor(entry.fatigue_pct);
+  };
+
+  return (
+    <Svg width={120} height={265} viewBox="0 0 120 265">
+      {/* ── Structural silhouette (dark fill, subtle stroke) ── */}
+
+      {/* Head */}
+      <Circle cx={60} cy={18} r={14} fill="#1A1538" stroke="#2A2550" strokeWidth={1} />
+
+      {/* Neck */}
+      <Rect x={55} y={31} width={10} height={11} rx={4} fill="#1A1538" />
+
+      {/* Torso */}
+      <Rect x={28} y={40} width={64} height={98} rx={12} fill="#1A1538" stroke="#2A2550" strokeWidth={1} />
+
+      {/* Left upper arm */}
+      <Rect x={10} y={46} width={18} height={60} rx={9} fill="#1A1538" stroke="#2A2550" strokeWidth={1} />
+      {/* Right upper arm */}
+      <Rect x={92} y={46} width={18} height={60} rx={9} fill="#1A1538" stroke="#2A2550" strokeWidth={1} />
+
+      {/* Left forearm */}
+      <Rect x={11} y={104} width={15} height={50} rx={7} fill="#1A1538" stroke="#2A2550" strokeWidth={1} />
+      {/* Right forearm */}
+      <Rect x={94} y={104} width={15} height={50} rx={7} fill="#1A1538" stroke="#2A2550" strokeWidth={1} />
+
+      {/* Left thigh */}
+      <Rect x={31} y={136} width={26} height={72} rx={13} fill="#1A1538" stroke="#2A2550" strokeWidth={1} />
+      {/* Right thigh */}
+      <Rect x={63} y={136} width={26} height={72} rx={13} fill="#1A1538" stroke="#2A2550" strokeWidth={1} />
+
+      {/* Left calf */}
+      <Rect x={33} y={205} width={22} height={55} rx={11} fill="#1A1538" stroke="#2A2550" strokeWidth={1} />
+      {/* Right calf */}
+      <Rect x={65} y={205} width={22} height={55} rx={11} fill="#1A1538" stroke="#2A2550" strokeWidth={1} />
+
+      {/* ── Muscle colour overlays ── */}
+      {BODY_SPOTS.map((s, i) => (
+        <Ellipse
+          key={i}
+          cx={s.cx} cy={s.cy} rx={s.rx} ry={s.ry}
+          fill={colorOf(s.id)}
+          opacity={colorOf(s.id) === UNTRAINED ? 0.6 : 0.75}
+        />
+      ))}
+
+      {/* Face details (subtle) */}
+      <Circle cx={55} cy={15} r={2} fill="rgba(255,255,255,0.15)" />
+      <Circle cx={65} cy={15} r={2} fill="rgba(255,255,255,0.15)" />
+      <Path d="M55 22 Q60 26 65 22" stroke="rgba(255,255,255,0.15)" strokeWidth={1} fill="none" />
+    </Svg>
+  );
+}
+
+// ── Main Screen ───────────────────────────────────────────────
 export default function Training({ navigation }) {
   const hour = new Date().getHours();
   const greeting =
@@ -52,16 +144,39 @@ export default function Training({ navigation }) {
     hour < 18 ? 'Good Afternoon' :
     'Good Evening';
 
-  const handleNav = (screen) => {
-    if (!screen) return;
-    navigation.navigate(screen);
-  };
+  const [fatigueMap, setFatigueMap]   = useState({});
+  const [fatigueList, setFatigueList] = useState([]);
+  const [fatigueLoading, setFatigueLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const rows = await getMuscleFatigue(user.id);
+        // Build lookup map: muscle_name → { fatigue_pct }
+        const map = {};
+        rows.forEach(r => { map[r.muscle_name] = r; });
+        setFatigueMap(map);
+        setFatigueList(rows);
+      } catch (e) {
+        console.warn('[BodyQ] fatigue fetch:', e);
+      } finally {
+        setFatigueLoading(false);
+      }
+    })();
+  }, []);
+
+  const handleNav = (screen) => { if (screen) navigation.navigate(screen); };
+
+  // Derive top fatigued muscle for callout
+  const topFatigued = fatigueList.find(m => m.fatigue_pct >= 70);
 
   return (
     <View style={s.root}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
 
-        {/* ── HEADER ─────────────────────────────────────────── */}
+        {/* ── HEADER ── */}
         <Animated.View entering={FadeInDown.delay(0).springify()} style={s.header}>
           <View>
             <Text style={s.greeting}>{greeting},</Text>
@@ -73,7 +188,7 @@ export default function Training({ navigation }) {
           </View>
         </Animated.View>
 
-        {/* ── HERO CARD ──────────────────────────────────────── */}
+        {/* ── HERO CARD ── */}
         <Animated.View entering={FadeInDown.delay(100).springify()}>
           <TouchableOpacity
             activeOpacity={0.9}
@@ -81,8 +196,7 @@ export default function Training({ navigation }) {
           >
             <LinearGradient
               colors={[C.purple, C.purpleD, '#1A0E4F']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={[s.heroCard, SHADOW]}
             >
               <View style={s.heroAccentLine} />
@@ -94,8 +208,8 @@ export default function Training({ navigation }) {
               <Text style={s.heroTitle}>Hyper-Mobility{'\n'}Reset</Text>
               <View style={s.heroMeta}>
                 {[
-                  { icon: 'time-outline',  val: '18 min'       },
-                  { icon: 'flame-outline', val: '240 kcal'      },
+                  { icon: 'time-outline',  val: '18 min' },
+                  { icon: 'flame-outline', val: '240 kcal' },
                   { icon: 'body-outline',  val: 'Posture Focus' },
                 ].map((m, i) => (
                   <View key={i} style={s.metaChip}>
@@ -105,9 +219,7 @@ export default function Training({ navigation }) {
                 ))}
               </View>
               <View style={s.heroFooter}>
-                <Text style={s.heroLogic}>
-                  "Based on your 6h sleep &{'\n'}4h desk session today."
-                </Text>
+                <Text style={s.heroLogic}>"Based on your 6h sleep &{'\n'}4h desk session today."</Text>
                 <View style={s.playCircle}>
                   <Ionicons name="play" size={22} color="#000" />
                 </View>
@@ -116,7 +228,7 @@ export default function Training({ navigation }) {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* ── 7-DAY CONSISTENCY STREAK ───────────────────────── */}
+        {/* ── 7-DAY STREAK ── */}
         <Animated.View entering={FadeInDown.delay(150).springify()} style={[s.streakCard, SHADOW]}>
           <View style={s.streakHeader}>
             <Ionicons name="flame" size={16} color={C.lime} />
@@ -138,7 +250,7 @@ export default function Training({ navigation }) {
           </View>
         </Animated.View>
 
-        {/* ── QUICK ACTIONS ──────────────────────────────────── */}
+        {/* ── QUICK ACTIONS ── */}
         <Animated.View entering={FadeInDown.delay(200).springify()} style={s.actionRow}>
           {QUICK_ACTIONS.map((a, i) => (
             <TouchableOpacity
@@ -155,43 +267,86 @@ export default function Training({ navigation }) {
           ))}
         </Animated.View>
 
-        {/* ── MUSCLES TARGETED ───────────────────────────────── */}
+        {/* ── RECOVERY STATUS (Muscle Heatmap) ── */}
         <Animated.View entering={FadeInDown.delay(250).springify()}>
           <View style={s.sectionRow}>
-            <Text style={s.sectionTitle}>Muscles Targeted</Text>
-            <Text style={s.sectionSub}>This week</Text>
+            <Text style={s.sectionTitle}>Recovery Status</Text>
+            <Text style={s.sectionSub}>Last 48 hrs</Text>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.muscleScroll}>
-            {MUSCLES.map((m, i) => (
-              <View key={i} style={[s.muscleCard, SHADOW]}>
-                <Text style={s.muscleName}>{m.name}</Text>
-                <Text style={[s.musclePct, { color: m.color }]}>{m.pct}%</Text>
-                <View style={s.muscleBarBg}>
-                  <View style={[s.muscleBarFill, { width: `${m.pct}%`, backgroundColor: m.color }]} />
-                </View>
-                <Text style={s.muscleVolume}>volume this wk</Text>
+
+          <View style={[s.heatmapCard, SHADOW]}>
+            {/* Body silhouette + legend side by side */}
+            <View style={s.heatmapBody}>
+              <BodySilhouette fatigueMap={fatigueMap} />
+            </View>
+
+            {/* Right: muscle list */}
+            <View style={s.heatmapList}>
+              {fatigueLoading ? (
+                <Text style={s.heatmapLoading}>Syncing...</Text>
+              ) : fatigueList.length === 0 ? (
+                <>
+                  <Text style={s.heatmapEmpty}>No workout{'\n'}data yet.</Text>
+                  <Text style={s.heatmapEmptySub}>All muscles{'\n'}are fresh!</Text>
+                </>
+              ) : (
+                fatigueList.slice(0, 6).map((m) => {
+                  const col = fatigueColor(m.fatigue_pct);
+                  return (
+                    <View key={m.muscle_name} style={s.muscleRow}>
+                      <View style={[s.muscleDot, { backgroundColor: col }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.muscleName}>{m.muscle_name}</Text>
+                        <View style={s.muscleBarBg}>
+                          <View style={[s.muscleBarFill, { width: `${m.fatigue_pct}%`, backgroundColor: col }]} />
+                        </View>
+                      </View>
+                      <Text style={[s.muscleTag, { color: col }]}>{fatigueLabel(m.fatigue_pct)}</Text>
+                    </View>
+                  );
+                })
+              )}
+
+              {/* Legend */}
+              <View style={s.legend}>
+                {[
+                  { color: C.lime,    label: 'Fresh'    },
+                  { color: '#FF9500', label: 'Sore'     },
+                  { color: C.purple,  label: 'Fatigued' },
+                ].map(l => (
+                  <View key={l.label} style={s.legendItem}>
+                    <View style={[s.legendDot, { backgroundColor: l.color }]} />
+                    <Text style={s.legendTxt}>{l.label}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </ScrollView>
+            </View>
+          </View>
+
+          {/* Callout if a muscle is fatigued */}
+          {topFatigued && (
+            <View style={[s.calloutCard, SHADOW]}>
+              <Ionicons name="warning-outline" size={16} color="#FF9500" />
+              <Text style={s.calloutTxt}>
+                <Text style={{ color: '#FF9500', fontWeight: '900' }}>{topFatigued.muscle_name}</Text>
+                {` is at ${topFatigued.fatigue_pct}% fatigue — consider a rest day or switch muscle groups.`}
+              </Text>
+            </View>
+          )}
         </Animated.View>
 
-        {/* ── PERFORMANCE LIBRARY ────────────────────────────── */}
-        <Animated.View entering={FadeInDown.delay(300).springify()} style={{ marginTop: 24 }}>
+        {/* ── PERFORMANCE LIBRARY ── */}
+        <Animated.View entering={FadeInDown.delay(300).springify()} style={{ marginTop: 20 }}>
           <View style={s.sectionRow}>
             <Text style={s.sectionTitle}>Performance Library</Text>
             <TouchableOpacity onPress={() => handleNav('ExerciseList')}>
               <Text style={s.sectionLink}>View All</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[s.libCard, SHADOW]}
-            onPress={() => handleNav('ExerciseList')}
-            activeOpacity={0.85}
-          >
+          <TouchableOpacity style={[s.libCard, SHADOW]} onPress={() => handleNav('ExerciseList')} activeOpacity={0.85}>
             <LinearGradient
               colors={['#1A1535', C.card]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={s.libGradient}
             >
               <View style={s.libIconBox}>
@@ -206,7 +361,7 @@ export default function Training({ navigation }) {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* ── POSTURE AI CARD ────────────────────────────────── */}
+        {/* ── POSTURE AI CARD ── */}
         <Animated.View entering={FadeInDown.delay(350).springify()} style={{ marginTop: 14 }}>
           <TouchableOpacity activeOpacity={0.85} onPress={() => handleNav('PostureAI')}>
             <View style={[s.postureCard, SHADOW]}>
@@ -244,7 +399,7 @@ const s = StyleSheet.create({
   recoveryNum:   { color: C.lime, fontSize: 20, fontWeight: '900', lineHeight: 22 },
   recoveryLabel: { color: C.sub, fontSize: 8, fontWeight: '800', letterSpacing: 1, marginTop: 2 },
 
-  // Hero Card
+  // Hero
   heroCard:       { borderRadius: 28, padding: 26, marginBottom: 16, overflow: 'hidden' },
   heroAccentLine: { position: 'absolute', top: 0, left: 26, right: 26, height: 2, backgroundColor: C.lime, opacity: 0.5, borderRadius: 1 },
   heroBadge:      { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(200,241,53,0.12)', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(200,241,53,0.25)' },
@@ -276,20 +431,37 @@ const s = StyleSheet.create({
   actionIconWrap: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(200,241,53,0.08)', alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 1, borderColor: 'rgba(200,241,53,0.2)' },
   actionTxt:      { color: C.text, fontSize: 11, fontWeight: '700' },
 
-  // Muscles
-  muscleScroll: { marginHorizontal: -20, paddingHorizontal: 20, marginBottom: 0 },
-  muscleCard:   { width: 130, backgroundColor: C.card, borderRadius: 20, padding: 16, marginRight: 12, borderWidth: 1, borderColor: C.border },
-  muscleName:   { color: C.text, fontSize: 13, fontWeight: '800', marginBottom: 6 },
-  musclePct:    { fontSize: 28, fontWeight: '900', letterSpacing: -1, marginBottom: 8 },
-  muscleBarBg:  { height: 6, backgroundColor: C.border, borderRadius: 3, overflow: 'hidden', marginBottom: 6 },
-  muscleBarFill:{ height: 6, borderRadius: 3 },
-  muscleVolume: { color: C.sub, fontSize: 10 },
-
   // Section row
   sectionRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle:{ color: C.text, fontSize: 16, fontWeight: '800' },
   sectionLink: { color: C.lime, fontSize: 12, fontWeight: '700' },
   sectionSub:  { color: C.sub, fontSize: 12 },
+
+  // Heatmap card
+  heatmapCard:    { backgroundColor: C.card, borderRadius: 22, borderWidth: 1, borderColor: C.border, flexDirection: 'row', padding: 16, marginBottom: 10 },
+  heatmapBody:    { alignItems: 'center', justifyContent: 'center', marginRight: 14 },
+  heatmapList:    { flex: 1, justifyContent: 'center', gap: 6 },
+  heatmapLoading: { color: C.sub, fontSize: 12, fontStyle: 'italic' },
+  heatmapEmpty:   { color: C.text, fontSize: 13, fontWeight: '700', lineHeight: 18 },
+  heatmapEmptySub:{ color: C.lime, fontSize: 11, marginTop: 4, lineHeight: 16 },
+
+  // Per-muscle row
+  muscleRow:     { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  muscleDot:     { width: 8, height: 8, borderRadius: 4 },
+  muscleName:    { color: C.text, fontSize: 11, fontWeight: '700', marginBottom: 3 },
+  muscleBarBg:   { height: 4, backgroundColor: C.border, borderRadius: 2, overflow: 'hidden' },
+  muscleBarFill: { height: 4, borderRadius: 2 },
+  muscleTag:     { fontSize: 8, fontWeight: '900', letterSpacing: 0.5, minWidth: 52, textAlign: 'right' },
+
+  // Legend
+  legend:      { flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' },
+  legendItem:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendDot:   { width: 7, height: 7, borderRadius: 3.5 },
+  legendTxt:   { color: C.sub, fontSize: 9, fontWeight: '700' },
+
+  // Fatigue callout
+  calloutCard: { backgroundColor: '#FF950018', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderWidth: 1, borderColor: '#FF950040', marginBottom: 4 },
+  calloutTxt:  { color: '#FFFFFF', fontSize: 12, lineHeight: 18, flex: 1 },
 
   // Library
   libCard:    { borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: C.border },

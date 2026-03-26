@@ -2,16 +2,14 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, Text,
   StatusBar, ActivityIndicator, Alert, Animated,
-  Dimensions,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Camera } from 'expo-camera';
 import { Asset } from 'expo-asset';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../../lib/supabase';
+import { BlurView } from 'expo-blur';
 import { useAuth } from '../../context/AuthContext';
-
-const { width: W, height: H } = Dimensions.get('window');
+import { saveWorkoutSession } from '../../services/workoutService';
 
 // ── Exercise keyword → HTML camelCase key ─────────────────────
 function resolveHtmlKey(name) {
@@ -127,26 +125,19 @@ export default function WorkoutActive({ route, navigation }) {
           : (msg.accuracy ?? 0);
         const calories = Math.max(1, Math.round(elapsed / 60 * 8));
 
-        // Persist to Supabase — navigate regardless of outcome
+        // Persist session + muscle fatigue, then navigate
         (async () => {
-          let sessionId = null;
-          try {
-            const { data, error } = await supabase
-              .from('workout_sessions')
-              .insert({
-                user_id:        user?.id,
-                exercise_name:  msg.exercise || displayName,
-                reps:           msg.reps,
-                posture_score:  avgFormScore,
-                calories_burned: calories,
+          const sessionId = user?.id
+            ? await saveWorkoutSession({
+                userId:          user.id,
+                exerciseKey:     htmlKey ?? rawKey,
+                exerciseName:    msg.exercise || displayName,
+                reps:            msg.reps,
+                postureScore:    avgFormScore,
+                caloriesBurned:  calories,
               })
-              .select('id')
-              .single();
-            if (!error && data) sessionId = data.id;
-            else console.warn('[BodyQ] Supabase insert error:', error?.message);
-          } catch (e) {
-            console.error('[BodyQ] Supabase error:', e);
-          }
+            : null;
+
           navigation.replace('WorkoutSummary', {
             exerciseName: displayName,
             repCount:     msg.reps,
@@ -246,26 +237,24 @@ export default function WorkoutActive({ route, navigation }) {
         <Text style={s.atmosRep}>{repCount}</Text>
       </View>
 
-      {/* ── TOP-LEFT: Close + Exercise Name ── */}
-      <View style={s.topLeft}>
+      {/* ── TOP-LEFT: Close + Exercise Badge (Glassmorphism) ── */}
+      <BlurView intensity={40} tint="dark" style={s.topLeft}>
         <TouchableOpacity style={s.closeBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="close" size={20} color="#000" />
         </TouchableOpacity>
         <Text style={s.exerciseTitle}>{displayName}</Text>
-      </View>
+      </BlurView>
 
       {/* ── TOP-RIGHT: Form Ring (Glassmorphism) ── */}
-      <View style={s.ringWrap} pointerEvents="none">
+      <BlurView intensity={40} tint="dark" style={s.ringWrap} pointerEvents="none">
         <View style={[s.ringOuter, { borderColor: ring }]}>
-          <View style={s.ringInner}>
-            <Text style={[s.ringPct, { color: ring }]}>{formScore}</Text>
-            <Text style={s.ringLabel}>FORM</Text>
-          </View>
+          <Text style={[s.ringPct, { color: ring }]}>{formScore}</Text>
+          <Text style={s.ringLabel}>FORM</Text>
         </View>
-      </View>
+      </BlurView>
 
-      {/* ── BOTTOM HUD ── */}
-      <View style={s.bottomOverlay}>
+      {/* ── BOTTOM HUD (Glassmorphism) ── */}
+      <BlurView intensity={50} tint="dark" style={s.bottomOverlay}>
         <View style={s.cueRow}>
           <Ionicons name="sparkles" size={13} color="#C8F135" style={{ marginRight: 7 }} />
           <Text style={s.cueText} numberOfLines={2}>{cue}</Text>
@@ -274,78 +263,69 @@ export default function WorkoutActive({ route, navigation }) {
           <Text style={s.finishBtnTxt}>Finish</Text>
           <Ionicons name="checkmark" size={15} color="#000" />
         </TouchableOpacity>
-      </View>
+      </BlurView>
     </View>
   );
 }
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  center:    { justifyContent: 'center', alignItems: 'center' },
+  center:    { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
 
-  // Camera feed — true full-screen
-  webview: {
-    position: 'absolute', top: 0, left: 0,
-    width: W, height: H,
-    backgroundColor: '#000',
-  },
+  // True full-bleed WebView — zero margin/padding, fills every pixel
+  webview: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000' },
 
   // Pulsing full-screen border overlay
-  pulseBorder: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    borderRadius: 0, zIndex: 30, pointerEvents: 'none',
-  },
+  pulseBorder: { ...StyleSheet.absoluteFillObject, zIndex: 30 },
 
-  // Atmospheric huge rep number (center-top, semi-transparent)
+  // Atmospheric huge rep counter — center-top, purely decorative
   atmosWrap: {
-    position: 'absolute', top: H * 0.14, left: 0, right: 0,
+    position: 'absolute', top: '14%', left: 0, right: 0,
     alignItems: 'center', zIndex: 10,
   },
   atmosRep: {
-    fontSize: 160,
-    fontWeight: '900',
+    fontSize: 160, fontWeight: '900',
     color: 'rgba(255,255,255,0.18)',
-    letterSpacing: -8,
-    lineHeight: 160,
+    letterSpacing: -8, lineHeight: 160,
   },
 
-  // Top-left cluster
+  // Top-left — BlurView pill (exit + name)
   topLeft: {
-    position: 'absolute', top: 52, left: 18,
-    flexDirection: 'row', alignItems: 'center', gap: 12, zIndex: 40,
+    position: 'absolute', top: 52, left: 16, zIndex: 40,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderRadius: 30, overflow: 'hidden',
+    paddingVertical: 6, paddingHorizontal: 8,
   },
   closeBtn: {
-    width: 40, height: 40, backgroundColor: '#C8F135',
-    borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    width: 38, height: 38, backgroundColor: '#C8F135',
+    borderRadius: 19, alignItems: 'center', justifyContent: 'center',
   },
   exerciseTitle: {
-    color: '#C8F135', fontSize: 15, fontWeight: '900',
-    letterSpacing: 1.5,
-    textShadowColor: 'rgba(200,241,53,0.5)', textShadowRadius: 10,
+    color: '#C8F135', fontSize: 14, fontWeight: '900',
+    letterSpacing: 1.2, marginRight: 6,
+    textShadowColor: 'rgba(200,241,53,0.4)', textShadowRadius: 8,
   },
 
-  // Glassmorphic form ring — top-right
+  // Top-right — BlurView circle (form ring)
   ringWrap: {
-    position: 'absolute', top: 46, right: 18, zIndex: 40,
+    position: 'absolute', top: 46, right: 16, zIndex: 40,
+    width: 72, height: 72, borderRadius: 36, overflow: 'hidden',
+    alignItems: 'center', justifyContent: 'center',
   },
   ringOuter: {
-    width: 72, height: 72, borderRadius: 36,
+    width: 68, height: 68, borderRadius: 34,
     borderWidth: 3,
-    backgroundColor: 'rgba(255,255,255,0.07)',
     alignItems: 'center', justifyContent: 'center',
-    // iOS blur approximation
-    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 8,
   },
-  ringInner: { alignItems: 'center' },
   ringPct:   { fontSize: 20, fontWeight: '900', lineHeight: 22 },
   ringLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 8, fontWeight: '800', letterSpacing: 1 },
 
-  // Bottom HUD
+  // Bottom HUD — BlurView bar
   bottomOverlay: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    paddingHorizontal: 20, paddingVertical: 16, paddingBottom: 40,
-    flexDirection: 'row', alignItems: 'center', zIndex: 40,
+    position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 40,
+    overflow: 'hidden',
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 16, paddingBottom: 42,
   },
   cueRow:       { flex: 1, flexDirection: 'row', alignItems: 'center', paddingRight: 12 },
   cueText:      { color: '#FFFFFF', fontSize: 13, fontWeight: '600', lineHeight: 19, flex: 1 },

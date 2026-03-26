@@ -38,25 +38,22 @@
   }
 
   html, body {
-    height: 100%;
-    background: var(--bg);
+    width: 100%; height: 100%;
+    background: #000;
     color: var(--text);
     font-family: var(--font-body);
-    overflow-x: hidden;
+    overflow: hidden;
   }
 
-  /* ─── LAYOUT ──────────────────────────────────────────────── */
+  /* ─── LAYOUT — full-bleed for React Native WebView ────────── */
   #app {
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    grid-template-columns: 1fr 320px;
-    grid-template-areas:
-      "header header"
-      "feed   panel"
-      "feed   panel";
-    min-height: 100vh;
-    gap: 0;
+    display: block;
+    position: fixed;
+    inset: 0;
   }
+
+  /* Hide web chrome — RN provides its own HUD */
+  header, #sidePanel { display: none !important; }
 
   /* ─── HEADER ──────────────────────────────────────────────── */
   header {
@@ -193,16 +190,14 @@
     50%       { opacity: .5; }
   }
 
-  /* ─── FEED AREA ──────────────────────────────────────────── */
+  /* ─── FEED AREA — true fullscreen ───────────────────────── */
   #feedArea {
-    grid-area: feed;
-    position: relative;
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
     background: #000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     overflow: hidden;
-    min-height: 400px;
   }
 
   #inputVideo {

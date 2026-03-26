@@ -24,7 +24,7 @@ const BentoCard = ({ children, style, delay = 0 }) => (
 );
 
 export default function Home({ navigation }) {
-  const { isLoading, error, user, stats, logWater, logSleep, refresh } = useDashboard();
+  const { isLoading, error, user, stats, logWater, logSleep, refresh, yaraInsight, workoutCalories, muscleFatigue } = useDashboard();
   const { steps: liveSteps } = useShakySteps(user?.id);
   const totalSteps = (stats?.steps || 0) + liveSteps;
   const [displayCal, setDisplayCal] = useState(0);
@@ -90,9 +90,7 @@ export default function Home({ navigation }) {
               <Text style={styles.aiTitle}>YARA COACH</Text>
               <View style={styles.liveDot} />
             </View>
-            <Text style={styles.aiText}>
-              "You're doing great! You need 40g more protein to optimize muscle recovery today. Consider a shake."
-            </Text>
+            <Text style={styles.aiText}>"{yaraInsight}"</Text>
           </LinearGradient>
         </BentoCard>
 
@@ -106,6 +104,10 @@ export default function Home({ navigation }) {
                <Text style={styles.calSub}>Eaten: {stats.calories.eaten}</Text>
                <View style={styles.dividerV} />
                <Text style={styles.calSub}>Goal: {stats.calories.target}</Text>
+               {workoutCalories > 0 && <>
+                 <View style={styles.dividerV} />
+                 <Text style={[styles.calSub, { color: '#C8F135' }]}>🔥 {workoutCalories} burned</Text>
+               </>}
             </View>
             <Pressable 
               style={styles.logBtn} 
@@ -163,7 +165,25 @@ export default function Home({ navigation }) {
           </BentoCard>
         </View>
 
-        {/* 5. WORKOUT (Wide Card) */}
+        {/* 5. MUSCLE FATIGUE ROW */}
+        {muscleFatigue.length > 0 && (
+          <BentoCard delay={650}>
+            <Text style={styles.cardLabel}>MUSCLE FATIGUE</Text>
+            {muscleFatigue.slice(0, 3).map((m) => (
+              <View key={m.muscle_name} style={{ marginBottom: 8 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
+                  <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>{m.muscle_name}</Text>
+                  <Text style={{ color: m.fatigue_pct >= 70 ? '#FF9500' : '#C8F135', fontSize: 12, fontWeight: '800' }}>{m.fatigue_pct}%</Text>
+                </View>
+                <View style={styles.barContainer}>
+                  <View style={[styles.barFill, { width: `${m.fatigue_pct}%`, backgroundColor: m.fatigue_pct >= 70 ? '#FF9500' : '#C8F135' }]} />
+                </View>
+              </View>
+            ))}
+          </BentoCard>
+        )}
+
+        {/* 6. WORKOUT (Wide Card) */}
         <BentoCard delay={700} style={styles.workoutCard}>
           <View style={styles.workoutContent}>
              <View>

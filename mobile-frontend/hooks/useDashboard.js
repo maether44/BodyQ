@@ -1,34 +1,49 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { getHomeSnapshot } from '../services/dashboardService';
+import { getMuscleFatigue, RECOVERY_MAP } from '../services/workoutService';
 
 export function useDashboard() {
-  const [data, setData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [data,         setData]         = useState(null);
+  const [isLoading,    setIsLoading]    = useState(true);
+  const [error,        setError]        = useState(null);
+  const [muscleFatigue,setMuscleFatigue]= useState([]);
+  const [workoutCals,  setWorkoutCals]  = useState(0);
 
   const loadAllData = useCallback(async () => {
     try {
       setIsLoading(true);
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
+
       if (authError || !user) {
-        console.log("Auth Error or No User:", authError);
         setIsLoading(false);
         return;
       }
 
-      const result = await getHomeSnapshot(user.id);
-      
+      const TODAY = new Date().toISOString().split('T')[0];
+
+      const [result, fatigue, activityRow] = await Promise.all([
+        getHomeSnapshot(user.id),
+        getMuscleFatigue(user.id),
+        supabase
+          .from('daily_activity')
+          .select('calories_workout')
+          .eq('user_id', user.id)
+          .eq('date', TODAY)
+          .maybeSingle(),
+      ]);
+
       if (!result) {
-        console.log("RPC returned no data. Check Supabase SQL logs.");
-        setError("No data received");
+        setError('No data received');
       } else {
-        console.log("Dashboard Data Loaded successfully:", result);
         setData(result);
       }
+
+      setMuscleFatigue(fatigue);
+      setWorkoutCals(activityRow.data?.calories_workout ?? 0);
+
     } catch (err) {
-      console.error("Critical error in useDashboard:", err);
+      console.error('Critical error in useDashboard:', err);
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -58,7 +73,16 @@ export function useDashboard() {
       steps: data?.activity?.steps || 0,
       sleep: data?.activity?.sleep_hours ?? null,
     },
-    insight: data?.insight || "Keep it up!",
+    workoutCalories: workoutCals,
+    muscleFatigue,
+    yaraInsight: (() => {
+      const top = muscleFatigue.find(m => m.fatigue_pct >= 70);
+      if (top) {
+        const recovery = RECOVERY_MAP[top.muscle_name] ?? 'a different muscle group';
+        return `I noticed your ${top.muscle_name} fatigue is high (${top.fatigue_pct}%). Tomorrow, we will focus on ${recovery} for recovery.`;
+      }
+      return data?.insight || "You're doing great! Stay consistent and the results will follow.";
+    })(),
     logSleep: useCallback(async (hours) => {
       setData(prev => {
         if (!prev) return prev;
