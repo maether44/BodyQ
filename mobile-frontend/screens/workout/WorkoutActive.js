@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useAuth } from '../../context/AuthContext';
 import { saveWorkoutSession } from '../../services/workoutService';
+import { supabase } from '../../lib/supabase';
 
 // ── Exercise keyword → HTML camelCase key ─────────────────────
 function resolveHtmlKey(name) {
@@ -116,27 +117,53 @@ export default function WorkoutActive({ route, navigation }) {
         if (isBad) triggerPulse();
       }
 
-      if (msg.type === 'rep') setRepCount(msg.count);
+      if (msg.type === 'REP_COUNTED') setRepCount(msg.count);
 
-      if (msg.type === 'SAVE_WORKOUT') {
+      if (msg.type === 'SESSION_COMPLETE') {
         const elapsed      = Math.floor((Date.now() - startTimeRef.current) / 1000);
         const avgFormScore = formScoreCount.current > 0
           ? Math.round(formScoreSum.current / formScoreCount.current)
-          : (msg.accuracy ?? 0);
-        const calories = Math.max(1, Math.round(elapsed / 60 * 8));
+          : (msg.score ?? 0);
+        const calories     = Math.max(1, msg.reps * 5);   // 5 kcal per strict clean rep
+        const activityMins = Math.round(elapsed / 60);
 
-        // Persist session + muscle fatigue, then navigate
         (async () => {
-          const sessionId = user?.id
-            ? await saveWorkoutSession({
-                userId:          user.id,
-                exerciseKey:     htmlKey ?? rawKey,
-                exerciseName:    msg.exercise || displayName,
-                reps:            msg.reps,
-                postureScore:    avgFormScore,
-                caloriesBurned:  calories,
-              })
-            : null;
+          let sessionId = null;
+          if (user?.id) {
+            // 1. Insert workout_sessions + update muscle fatigue (trigger handles calories_workout)
+            sessionId = await saveWorkoutSession({
+              userId:         user.id,
+              exerciseKey:    htmlKey ?? rawKey,
+              exerciseName:   msg.exercise || displayName,
+              reps:           msg.reps,
+              postureScore:   avgFormScore,
+              caloriesBurned: calories,
+            });
+
+            // 2. Upsert activity_minutes on daily_activity so Home refreshes immediately
+            try {
+              const TODAY = new Date().toISOString().split('T')[0];
+              const { data: existing } = await supabase
+                .from('daily_activity')
+                .select('id, activity_minutes')
+                .eq('user_id', user.id)
+                .eq('date', TODAY)
+                .maybeSingle();
+
+              if (existing) {
+                await supabase
+                  .from('daily_activity')
+                  .update({ activity_minutes: (existing.activity_minutes || 0) + activityMins })
+                  .eq('id', existing.id);
+              } else {
+                await supabase
+                  .from('daily_activity')
+                  .insert({ user_id: user.id, date: TODAY, activity_minutes: activityMins });
+              }
+            } catch (e) {
+              console.warn('[BodyQ] activity_minutes update failed:', e.message);
+            }
+          }
 
           navigation.replace('WorkoutSummary', {
             exerciseName: displayName,

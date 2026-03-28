@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { useDashboard } from '../hooks/useDashboard';
 import { useShakySteps } from '../hooks/useShakySteps';
@@ -28,6 +29,14 @@ export default function Home({ navigation }) {
   const { steps: liveSteps } = useShakySteps(user?.id);
   const totalSteps = (stats?.steps || 0) + liveSteps;
   const [displayCal, setDisplayCal] = useState(0);
+
+  // Re-fetch dashboard data every time this screen comes into focus
+  // (ensures calorie ring and activity bars update right after a workout)
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
 
   // Count-up effect for calories — only runs once data is ready
   useEffect(() => {
