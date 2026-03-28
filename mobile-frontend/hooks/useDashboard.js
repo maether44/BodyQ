@@ -60,9 +60,11 @@ export function useDashboard() {
     user: data?.user || { name: 'User', goal: 'maintain' },
     stats: {
       calories: {
-        eaten: data?.calories?.eaten || 0,
-        target: data?.calories?.target || 2000,
-        remaining: (data?.calories?.target || 2000) - (data?.calories?.eaten || 0)
+        eaten:   data?.calories?.eaten || 0,
+        target:  data?.calories?.target || 2000,
+        burned:  workoutCals,
+        // (Goal - Eaten) + Burned — workout calories add back to budget
+        remaining: (data?.calories?.target || 2000) - (data?.calories?.eaten || 0) + workoutCals,
       },
       macros: data?.macros || {
         protein: { current: 0, target: 150 },

@@ -25,7 +25,7 @@ const BentoCard = ({ children, style, delay = 0 }) => (
 );
 
 export default function Home({ navigation }) {
-  const { isLoading, error, user, stats, logWater, logSleep, refresh, yaraInsight, workoutCalories, muscleFatigue } = useDashboard();
+  const { isLoading, error, user, stats, logWater, logSleep, refresh, yaraInsight, muscleFatigue } = useDashboard();
   const { steps: liveSteps } = useShakySteps(user?.id);
   const totalSteps = (stats?.steps || 0) + liveSteps;
   const [displayCal, setDisplayCal] = useState(0);
@@ -113,11 +113,10 @@ export default function Home({ navigation }) {
                <Text style={styles.calSub}>Eaten: {stats.calories.eaten}</Text>
                <View style={styles.dividerV} />
                <Text style={styles.calSub}>Goal: {stats.calories.target}</Text>
-               {workoutCalories > 0 && <>
-                 <View style={styles.dividerV} />
-                 <Text style={[styles.calSub, { color: '#C8F135' }]}>🔥 {workoutCalories} burned</Text>
-               </>}
             </View>
+            {stats.calories.burned > 0 && (
+              <Text style={styles.calBurned}>🔥 Burned: {stats.calories.burned} kcal</Text>
+            )}
             <Pressable 
               style={styles.logBtn} 
               onPress={() => {
@@ -252,7 +251,8 @@ const styles = StyleSheet.create({
   
   cardLabel: { color: '#6B5F8A', fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 8 },
   bigCal: { color: '#C8F135', fontSize: 42, fontWeight: '900', marginVertical: 4 },
-  calRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  calRow:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  calBurned: { color: '#C8F135', fontSize: 11, fontWeight: '800', marginTop: 6 },
   calSub: { color: '#6B5F8A', fontSize: 11 },
   dividerV: { width: 1, height: 10, backgroundColor: '#1E1A35' },
   

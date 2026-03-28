@@ -232,11 +232,12 @@ export default function WorkoutActive({ route, navigation }) {
               caloriesBurned: calories,
             });
 
+            // Directly update daily_activity — don't rely on a trigger
             try {
               const TODAY = new Date().toISOString().split('T')[0];
               const { data: existing } = await supabase
                 .from('daily_activity')
-                .select('id, activity_minutes')
+                .select('id, activity_minutes, calories_workout')
                 .eq('user_id', user.id)
                 .eq('date', TODAY)
                 .maybeSingle();
@@ -244,15 +245,23 @@ export default function WorkoutActive({ route, navigation }) {
               if (existing) {
                 await supabase
                   .from('daily_activity')
-                  .update({ activity_minutes: (existing.activity_minutes || 0) + activityMins })
+                  .update({
+                    activity_minutes: (existing.activity_minutes || 0) + activityMins,
+                    calories_workout: (existing.calories_workout  || 0) + calories,
+                  })
                   .eq('id', existing.id);
               } else {
                 await supabase
                   .from('daily_activity')
-                  .insert({ user_id: user.id, date: TODAY, activity_minutes: activityMins });
+                  .insert({
+                    user_id:          user.id,
+                    date:             TODAY,
+                    activity_minutes: activityMins,
+                    calories_workout: calories,
+                  });
               }
             } catch (e) {
-              console.warn('[BodyQ] activity_minutes update failed:', e.message);
+              console.warn('[BodyQ] daily_activity update failed:', e.message);
             }
           }
 
