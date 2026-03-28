@@ -266,11 +266,13 @@ export default function WorkoutActive({ route, navigation }) {
               caloriesBurned: calories,
             });
 
+            // calories_workout is read from workout_sessions directly in useDashboard
+            // — only persist activity_minutes here (no calories_workout column needed)
             try {
               const TODAY = new Date().toISOString().split('T')[0];
               const { data: existing } = await supabase
                 .from('daily_activity')
-                .select('id, activity_minutes, calories_workout')
+                .select('id, activity_minutes')
                 .eq('user_id', user.id)
                 .eq('date', TODAY)
                 .maybeSingle();
@@ -278,20 +280,12 @@ export default function WorkoutActive({ route, navigation }) {
               if (existing) {
                 await supabase
                   .from('daily_activity')
-                  .update({
-                    activity_minutes: (existing.activity_minutes || 0) + activityMins,
-                    calories_workout: (existing.calories_workout  || 0) + calories,
-                  })
+                  .update({ activity_minutes: (existing.activity_minutes || 0) + activityMins })
                   .eq('id', existing.id);
               } else {
                 await supabase
                   .from('daily_activity')
-                  .insert({
-                    user_id:          user.id,
-                    date:             TODAY,
-                    activity_minutes: activityMins,
-                    calories_workout: calories,
-                  });
+                  .insert({ user_id: user.id, date: TODAY, activity_minutes: activityMins });
               }
             } catch (e) {
               console.warn('[BodyQ] daily_activity update failed:', e.message);
