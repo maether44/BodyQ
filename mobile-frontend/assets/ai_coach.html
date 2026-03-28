@@ -811,6 +811,7 @@ let currentAngles = {};
 let lastCue = "";
 let highlightJoint = null;
 let wasPostureCorrect = true;   // tracks frame-to-frame posture transition
+let repCountingEnabled = false; // gated until RN calls window.startAI() after countdown
 
 // debounce rep flash
 let repFlashTimeout = null;
@@ -862,6 +863,11 @@ function applyExerciseChange(key) {
 // ── Global access for React Native WebView injection ─────────
 window.applyExerciseChange = applyExerciseChange;
 
+// Called by RN after the 3-2-1 countdown finishes — enables rep counting
+window.startAI = function() {
+  repCountingEnabled = true;
+};
+
 // Called by WorkoutActive "Finish" button to get final session data
 window.getSessionState = function() {
   if (window.ReactNativeWebView) {
@@ -888,7 +894,8 @@ function doReset() {
   lastCue       = "";
   stableStart   = null;
   isCalibrated  = false;
-  wasPostureCorrect = true;
+  wasPostureCorrect  = true;
+  repCountingEnabled = false;
 
   repCountEl.textContent = '0';
   formPctEl.textContent  = '—';
@@ -1046,7 +1053,7 @@ function onResults(results) {
     phaseEl.textContent = good ? 'HOLDING' : 'FIX FORM';
     stateEl.textContent  = '—';
 
-  } else if (ex.repConfig) {
+  } else if (ex.repConfig && repCountingEnabled) {
     const { joint, upThreshold, downThreshold } = ex.repConfig;
     const angle = currentAngles[joint];
     if (angle !== undefined) {
