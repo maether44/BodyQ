@@ -55,8 +55,8 @@ const METRICS = [
 
 export default function Insights() {
   const [period, setPeriod] = useState('Week');
-  const data = TREND_DATA[period];
-  const max = Math.max(...data);
+  const data = TREND_DATA[period] || TREND_DATA['Week'];
+  const max = data ? Math.max(...data) : 100;
 
   return (
     <View style={styles.root}>
@@ -89,7 +89,7 @@ export default function Insights() {
         <View style={styles.chartCard}>
           <Text style={styles.chartTitle}>Health Score Trend</Text>
           <View style={styles.lineChart}>
-            {data.map((val, i) => {
+            {(data || []).map((val, i) => {
               const barH = (val / 100) * 100;
               const isLast = i === data.length - 1;
               return (

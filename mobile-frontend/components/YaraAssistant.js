@@ -57,6 +57,9 @@ export default function YaraAssistant() {
   const [input,    setInput]    = useState('');
   const [typing,   setTyping]   = useState(false);
   const [messages, setMessages] = useState([]);
+  
+  // Ensure messages is always an array
+  const safeMessages = Array.isArray(messages) ? messages : [];
 
   // Set greeting once profile loads
   const greetingSet = useRef(false);
@@ -185,7 +188,7 @@ export default function YaraAssistant() {
               contentContainerStyle={s.messagesContent}
               showsVerticalScrollIndicator={false}
             >
-              {messages.map((m, i) => (
+              {(safeMessages || []).map((m, i) => (
                 <View key={i} style={[s.msgRow, m.from === 'user' && s.msgRowUser]}>
                   {m.from === 'yara' && (
                     <View style={s.msgAvatar}>
