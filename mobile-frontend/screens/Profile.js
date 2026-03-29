@@ -1,7 +1,7 @@
-// screens/Profile.js — mock data replaced with static defaults
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { supabase } from '../lib/supabase';
+import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 const C = {
   bg:'#0F0B1E', card:'#161230', border:'#1E1A35',
@@ -9,12 +9,28 @@ const C = {
   text:'#FFFFFF', sub:'#6B5F8A', green:'#34C759', orange:'#FF9500',
 };
 
-const USER = { name:'Maether', email:'maether@bodyq.app', age:24, gender:'male', heightCm:178, weightKg:78, goalWeightKg:72, activityLevel:'moderate', goal:'fat_loss' };
-const BMR  = 1820;
-const TDEE = 2520;
-const CALORIE_TARGET = 2100;
-const MACROS = { protein:160, carbs:220, fat:65 };
-const WATER_TARGET_ML = 2500;
+const GOAL_LABELS = {
+  lose_fat:     'Lose Fat 🔥',
+  fat_loss:     'Lose Fat 🔥',
+  gain_muscle:  'Build Muscle 💪',
+  muscle_gain:  'Build Muscle 💪',
+  maintain:     'Stay Fit ⚖️',
+  gain_weight:  'Gain Weight 🍽️',
+  build_habits: 'Build Habits 🧠',
+};
+
+const ACTIVITY_LABELS = {
+  sedentary:   'Sedentary',
+  light:       'Lightly Active',
+  moderate:    'Moderately Active',
+  active:      'Very Active',
+  very_active: 'Athlete',
+};
+
+const ACTIVITY_MULT = {
+  sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9,
+};
+
 const XP = { level:7, current:340, goal:500 };
 const BADGES = [
   { id:'first_workout', icon:'💪', label:'First Workout', xp:50,  earned:true  },
@@ -25,38 +41,113 @@ const BADGES = [
   { id:'clean_eater',   icon:'🥗', label:'Clean Eater',   xp:75,  earned:false },
 ];
 const PERSONAL_RECORDS = [
-  { exercise:'Bench Press', weight:'80 kg', unit:'', date:'2 weeks ago' },
-  { exercise:'Squat',       weight:'100 kg',unit:'', date:'1 week ago'  },
-  { exercise:'Deadlift',    weight:'120 kg',unit:'', date:'3 days ago'  },
+  { exercise:'Bench Press', weight:'80 kg',  date:'2 weeks ago' },
+  { exercise:'Squat',       weight:'100 kg', date:'1 week ago'  },
+  { exercise:'Deadlift',    weight:'120 kg', date:'3 days ago'  },
 ];
 
-const GOAL_LABELS     = { fat_loss:'Lose Fat 🔥', muscle_gain:'Build Muscle 💪', maintain:'Stay Fit ⚖️' };
-const ACTIVITY_LABELS = { sedentary:'Sedentary', light:'Lightly Active', moderate:'Moderately Active', active:'Very Active', very_active:'Athlete' };
+function calcAgeFromISO(isoDate) {
+  if (!isoDate) return null;
+  const birth = new Date(isoDate);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const passed = today.getMonth() > birth.getMonth() ||
+    (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+  return passed ? age : age - 1;
+}
+
+function calcBMRDirect(gender, weightKg, heightCm, age) {
+  if (!weightKg || !heightCm || !age) return 0;
+  return Math.round(
+    gender === 'female'
+      ? 10 * weightKg + 6.25 * heightCm - 5 * age - 161
+      : 10 * weightKg + 6.25 * heightCm - 5 * age + 5
+  );
+}
 
 function Row({ label, value, color }) {
   return (
     <View style={s.statRow}>
       <Text style={s.statLabel}>{label}</Text>
-      <Text style={[s.statValue, color && { color }]}>{value}</Text>
+      <Text style={[s.statValue, color && { color }]}>{value ?? '—'}</Text>
     </View>
   );
 }
 
 export default function Profile({ navigate, replayTour }) {
-  const { signOut } = useAuth();
+  const { signOut, user: authUser } = useAuth();
+  const [profile, setProfile] = useState(null);
+  const [calorieTarget, setCalorieTarget] = useState(null);
+  const [proteinTarget, setProteinTarget] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [notifWorkout, setNotifWorkout] = useState(true);
   const [notifWater,   setNotifWater  ] = useState(true);
   const [notifMeal,    setNotifMeal   ] = useState(false);
 
-  const earnedBadges = BADGES.filter(b => b.earned);
-  const xpPct  = XP.current / XP.goal;
-  const bmi    = (USER.weightKg / ((USER.heightCm / 100) ** 2)).toFixed(1);
-  const bmiNum = parseFloat(bmi);
-  const bmiStatus = bmiNum < 18.5 ? 'Underweight' : bmiNum < 25 ? 'Normal' : bmiNum < 30 ? 'Overweight' : 'Obese';
+  useEffect(() => {
+    if (!authUser?.id) return;
+    (async () => {
+      try {
+        const [{ data: prof }, { data: cal }] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('full_name, date_of_birth, gender, height_cm, weight_kg, goal, activity_level, target_weight_kg')
+            .eq('id', authUser.id)
+            .single(),
+          supabase
+            .from('calorie_targets')
+            .select('daily_calories, protein_target')
+            .eq('user_id', authUser.id)
+            .order('effective_from', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+        setProfile(prof);
+        if (cal) {
+          setCalorieTarget(cal.daily_calories);
+          setProteinTarget(cal.protein_target);
+        }
+      } finally {
+        setLoadingProfile(false);
+      }
+    })();
+  }, [authUser?.id]);
+
+  if (loadingProfile) {
+    return (
+      <View style={[s.root, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator color={C.purple} size="large" />
+      </View>
+    );
+  }
+
+  const name         = profile?.full_name || authUser?.user_metadata?.full_name || 'User';
+  const email        = authUser?.email || '';
+  const age          = calcAgeFromISO(profile?.date_of_birth);
+  const gender       = profile?.gender || 'male';
+  const heightCm     = profile?.height_cm;
+  const weightKg     = profile?.weight_kg;
+  const goalWeightKg = profile?.target_weight_kg;
+  const activityLevel= profile?.activity_level || 'moderate';
+  const goal         = profile?.goal || 'maintain';
+
+  const bmr      = calcBMRDirect(gender, weightKg, heightCm, age);
+  const tdee     = bmr ? Math.round(bmr * (ACTIVITY_MULT[activityLevel] || 1.55)) : 0;
+  const calTarget = calorieTarget || (goal === 'lose_fat' || goal === 'fat_loss' ? tdee - 400 : goal === 'gain_muscle' ? tdee + 200 : tdee);
+  const protein  = proteinTarget || (weightKg ? Math.round(weightKg * 2) : 0);
+
+  const bmiVal    = heightCm && weightKg ? (weightKg / ((heightCm / 100) ** 2)).toFixed(1) : null;
+  const bmiNum    = bmiVal ? parseFloat(bmiVal) : null;
+  const bmiStatus = !bmiNum ? '—' : bmiNum < 18.5 ? 'Underweight' : bmiNum < 25 ? 'Normal' : bmiNum < 30 ? 'Overweight' : 'Obese';
   const bmiColor  = bmiNum >= 18.5 && bmiNum < 25 ? C.green : C.orange;
-  const goalNote  = USER.goal === 'fat_loss' ? '400 kcal deficit for steady fat loss (~0.4 kg/week)'
-    : USER.goal === 'muscle_gain' ? '200 kcal surplus for lean muscle building'
+  const goalNote  = goal === 'lose_fat' || goal === 'fat_loss'
+    ? '400 kcal deficit for steady fat loss (~0.4 kg/week)'
+    : goal === 'gain_muscle' || goal === 'muscle_gain'
+    ? '200 kcal surplus for lean muscle building'
     : 'Maintenance calories — staying fit and healthy';
+
+  const earnedBadges = BADGES.filter(b => b.earned);
+  const xpPct = XP.current / XP.goal;
 
   return (
     <View style={s.root}>
@@ -66,13 +157,13 @@ export default function Profile({ navigate, replayTour }) {
 
         <View style={s.profileCard}>
           <View style={s.avatarCircle}>
-            <Text style={s.avatarText}>{USER.name[0]}</Text>
+            <Text style={s.avatarText}>{name[0]?.toUpperCase()}</Text>
           </View>
           <View style={s.profileInfo}>
-            <Text style={s.profileName}>{USER.name}</Text>
-            <Text style={s.profileEmail}>{USER.email}</Text>
+            <Text style={s.profileName}>{name}</Text>
+            <Text style={s.profileEmail}>{email}</Text>
             <View style={s.goalChip}>
-              <Text style={s.goalChipTxt}>{GOAL_LABELS[USER.goal]}</Text>
+              <Text style={s.goalChipTxt}>{GOAL_LABELS[goal] || goal}</Text>
             </View>
           </View>
         </View>
@@ -93,13 +184,13 @@ export default function Profile({ navigate, replayTour }) {
 
         <View style={s.card}>
           <Text style={s.cardLabel}>BODY STATS</Text>
-          <Row label="Age"           value={`${USER.age} years`} />
-          <Row label="Gender"        value={USER.gender === 'male' ? 'Male' : 'Female'} />
-          <Row label="Height"        value={`${USER.heightCm} cm`} />
-          <Row label="Weight"        value={`${USER.weightKg} kg`} />
-          <Row label="Target Weight" value={`${USER.goalWeightKg} kg`} color={C.lime} />
-          <Row label="BMI"           value={`${bmi} (${bmiStatus})`} color={bmiColor} />
-          <Row label="Activity"      value={ACTIVITY_LABELS[USER.activityLevel]} />
+          <Row label="Age"           value={age ? `${age} years` : null} />
+          <Row label="Gender"        value={gender === 'male' ? 'Male' : gender === 'female' ? 'Female' : gender} />
+          <Row label="Height"        value={heightCm ? `${heightCm} cm` : null} />
+          <Row label="Weight"        value={weightKg ? `${weightKg} kg` : null} />
+          <Row label="Target Weight" value={goalWeightKg ? `${goalWeightKg} kg` : null} color={C.lime} />
+          <Row label="BMI"           value={bmiVal ? `${bmiVal} (${bmiStatus})` : null} color={bmiColor} />
+          <Row label="Activity"      value={ACTIVITY_LABELS[activityLevel] || activityLevel} />
           <TouchableOpacity style={s.editBtn}>
             <Text style={s.editBtnTxt}>Edit Body Stats</Text>
           </TouchableOpacity>
@@ -107,13 +198,11 @@ export default function Profile({ navigate, replayTour }) {
 
         <View style={s.card}>
           <Text style={s.cardLabel}>YOUR TARGETS</Text>
-          <Row label="BMR (base metabolism)" value={`${BMR} kcal`} />
-          <Row label="TDEE (maintenance)"    value={`${TDEE} kcal`} />
-          <Row label="Daily calorie target"  value={`${CALORIE_TARGET} kcal`} color={C.lime} />
-          <Row label="Protein goal"          value={`${MACROS.protein}g`} color={C.accent} />
-          <Row label="Carbs goal"            value={`${MACROS.carbs}g`} />
-          <Row label="Fat goal"              value={`${MACROS.fat}g`} />
-          <Row label="Water target"          value={`${(WATER_TARGET_ML/1000).toFixed(1)}L / day`} color="#0A84FF" />
+          <Row label="BMR (base metabolism)" value={bmr ? `${bmr} kcal` : null} />
+          <Row label="TDEE (maintenance)"    value={tdee ? `${tdee} kcal` : null} />
+          <Row label="Daily calorie target"  value={calTarget ? `${calTarget} kcal` : null} color={C.lime} />
+          <Row label="Protein goal"          value={protein ? `${protein}g` : null} color={C.accent} />
+          <Row label="Water target"          value="2.5L / day" color="#0A84FF" />
           <View style={s.targetNote}>
             <Text style={s.targetNoteTxt}>{goalNote}</Text>
           </View>
@@ -122,7 +211,7 @@ export default function Profile({ navigate, replayTour }) {
         <View style={s.card}>
           <Text style={s.cardLabel}>PERSONAL RECORDS</Text>
           {PERSONAL_RECORDS.map((pr, i) => (
-            <View key={i} style={[s.prRow, i < PERSONAL_RECORDS.length-1 && s.prRowBorder]}>
+            <View key={i} style={[s.prRow, i < PERSONAL_RECORDS.length - 1 && s.prRowBorder]}>
               <Text style={s.prExercise}>{pr.exercise}</Text>
               <View style={s.prRight}>
                 <Text style={s.prValue}>{pr.weight}</Text>
