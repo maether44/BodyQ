@@ -38,9 +38,9 @@ export default function Home({ navigation }) {
         if (!u) return;
         const { data } = await supabase
           .from('workout_sessions')
-          .select('exercise_name, reps, posture_score, created_at')
+          .select('notes, calories_burned, started_at')
           .eq('user_id', u.id)
-          .order('created_at', { ascending: false })
+          .order('started_at', { ascending: false })
           .limit(1)
           .maybeSingle();
         setLastSession(data ?? null);
@@ -210,13 +210,11 @@ export default function Home({ navigation }) {
               </Text>
               {lastSession ? (
                 <>
-                  <Text style={styles.workoutTitle}>
-                    {lastSession.exercise_name || 'Workout'}
+                  <Text style={styles.workoutTitle} numberOfLines={1}>
+                    {lastSession.notes?.split(' · ')[0] || 'Workout'}
                   </Text>
                   <Text style={styles.workoutSub}>
-                    {lastSession.reps ? `${lastSession.reps} reps` : ''}
-                    {lastSession.reps && lastSession.posture_score ? ' · ' : ''}
-                    {lastSession.posture_score ? `${lastSession.posture_score}% form` : ''}
+                    {lastSession.notes?.split(' · ').slice(1).join(' · ') || ''}
                   </Text>
                 </>
               ) : (

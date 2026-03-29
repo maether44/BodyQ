@@ -44,14 +44,21 @@ export const saveWorkoutSession = async ({
   caloriesBurned:  number;
 }): Promise<string | null> => {
   // 1. Insert workout_sessions row (trigger handles daily_activity update)
+  // Schema: id, user_id, started_at, ended_at, calories_burned, notes, ai_feedback
+  // exercise_name/reps/posture_score are stored in `notes` as a readable summary
+  const now = new Date().toISOString();
+  const notesValue = reps > 0
+    ? `${exerciseName} · ${reps} reps · ${postureScore}% form`
+    : exerciseName;
+
   const { data, error } = await supabase
     .from('workout_sessions')
     .insert({
       user_id:         userId,
-      exercise_name:   exerciseName,
-      reps,
-      posture_score:   postureScore,
+      notes:           notesValue,
       calories_burned: caloriesBurned,
+      started_at:      now,
+      ended_at:        now,
     })
     .select('id')
     .single();
