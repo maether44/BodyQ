@@ -651,9 +651,11 @@ const EXERCISES = {
     ],
     repConfig: {
       joint:         "leftKnee",
-      upThreshold:   165,   // must be nearly fully upright
-      downThreshold:  85,   // must reach below parallel
+      upThreshold:   165,   // standing upright
+      downThreshold: 100,   // < 100° = proper squat depth
     },
+    // Hip alignment must stay within spec — torso must not crash forward
+    criticalJoints: ['leftHip', 'rightHip'],
     isPlank: false,
   },
 
@@ -673,6 +675,8 @@ const EXERCISES = {
       { id: "hipRight",   min: 155, max: 180, cue: "Don't let hips sag — keep body straight" },
     ],
     repConfig: { joint: "leftElbow", upThreshold: 160, downThreshold: 70 },
+    // Hips MUST stay level — a sagging body = rep aborted
+    criticalJoints: ['hipLeft', 'hipRight'],
     isPlank: false,
   },
 
@@ -691,7 +695,9 @@ const EXERCISES = {
       { id: "leftShoulder",  min: 0,   max: 40,  cue: "Don't swing your elbow — keep it tucked" },
       { id: "rightShoulder", min: 0,   max: 40,  cue: "Don't swing your elbow — keep it tucked" },
     ],
-    repConfig: { joint: "leftElbow", upThreshold: 45, downThreshold: 155 },
+    repConfig: { joint: "leftElbow", upThreshold: 45, downThreshold: 140 },
+    // Shoulder must stay still — any swing aborts the rep
+    criticalJoints: ['leftShoulder', 'rightShoulder'],
     isPlank: false,
   },
 
@@ -711,6 +717,8 @@ const EXERCISES = {
       { id: "rightHip",   min: 150, max: 180, cue: "Don't arch your back — brace your core" },
     ],
     repConfig: { joint: "leftElbow", upThreshold: 160, downThreshold: 90 },
+    // Must reach full overhead extension — partial press = rep aborted
+    criticalJoints: ['leftElbow', 'rightElbow'],
     isPlank: false,
   },
 
@@ -724,12 +732,15 @@ const EXERCISES = {
       { id: "backRight", label: "Back Angle (R)", pts: [12,24,26] },
     ],
     formRules: [
-      { id: "leftKnee",  min: 70,  max: 175, cue: "Drive through your heels — keep knees aligned" },
-      { id: "rightKnee", min: 70,  max: 175, cue: "Drive through your heels — keep knees aligned" },
-      { id: "backLeft",  min: 60,  max: 110, cue: "Keep back flat — don't round your spine" },
-      { id: "backRight", min: 60,  max: 110, cue: "Keep back flat — don't round your spine" },
+      { id: "leftKnee",  min: 70,  max: 180, cue: "Drive through your heels — keep knees aligned" },
+      { id: "rightKnee", min: 70,  max: 180, cue: "Drive through your heels — keep knees aligned" },
+      // min: 45 catches dangerous rounding; max: 180 allows full standing position
+      { id: "backLeft",  min: 45,  max: 180, cue: "Keep back flat — don't round your spine" },
+      { id: "backRight", min: 45,  max: 180, cue: "Keep back flat — don't round your spine" },
     ],
-    repConfig: { joint: "backLeft", upThreshold: 160, downThreshold: 60 },
+    repConfig: { joint: "backLeft", upThreshold: 160, downThreshold: 65 },
+    // Back must not round below 45° — knees advisory only
+    criticalJoints: ['backLeft', 'backRight'],
     isPlank: false,
   },
 
@@ -747,6 +758,8 @@ const EXERCISES = {
       { id: "torso",     min: 80,  max: 180, cue: "Keep torso upright — don't lean forward" },
     ],
     repConfig: { joint: "leftKnee", upThreshold: 165, downThreshold: 90 },
+    // Front knee must track correctly — misalignment aborts the rep
+    criticalJoints: ['leftKnee'],
     isPlank: false,
   },
 
@@ -1015,8 +1028,12 @@ function onResults(results) {
   const totalRules = ex.formRules.filter(r => currentAngles[r.id] !== undefined).length;
   formScore = totalRules > 0 ? Math.round((passed / totalRules) * 100) : 100;
 
-  // true only when every monitored joint is within spec
-  const isPostureCorrect = badJoints.size === 0;
+  // Per-exercise critical joints — only these abort a rep.
+  // Advisory joints still generate coaching cues but don't abort.
+  const criticals = ex.criticalJoints || [];
+  const isPostureCorrect = criticals.length > 0
+    ? !criticals.some(j => badJoints.has(j))
+    : badJoints.size === 0;  // no criticals defined: require all joints clean
 
   // ── Update score UI ──────────────────────────────────────────
   const sc = scoreColor(formScore);
@@ -1079,6 +1096,9 @@ function onResults(results) {
             repState = inverted ? 'idle' : 'up'; // start waiting for first DOWN
             cueBox.textContent = '✓ Calibrated — begin your reps!';
             cueBox.className = 'good';
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CALIBRATED' }));
+            }
           }
         } else {
           stableStart = null;
@@ -1093,12 +1113,20 @@ function onResults(results) {
         // Normal (squat, pushup, press, deadlift, lunge):
         // up (standing) → down (low angle) → up (count rep)
         if (repState === 'up') {
-          if (angle < downThreshold) repState = 'down';
+          if (angle < downThreshold) {
+            repState = 'down';
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SYNC_STATUS', inSync: isPostureCorrect }));
+            }
+          }
         } else if (repState === 'down') {
           if (!isPostureCorrect && wasPostureCorrect) {
             // Posture broke mid-rep — abort and demand a fresh rep
             repState = 'up';
             playErrorSound();
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SYNC_STATUS', inSync: false }));
+            }
           } else if (angle > upThreshold && isPostureCorrect) {
             // Full clean rep completed
             repState = 'up';
@@ -1113,12 +1141,20 @@ function onResults(results) {
       } else {
         // Inverted (bicep curl): arm extended (high angle) → contracted (low) → extended (count rep)
         if (repState === 'idle' || repState === 'up') {
-          if (angle > downThreshold) repState = 'down'; // fully extended
+          if (angle > downThreshold) {
+            repState = 'down'; // fully extended
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SYNC_STATUS', inSync: isPostureCorrect }));
+            }
+          }
         } else if (repState === 'down') {
           if (!isPostureCorrect && wasPostureCorrect) {
             // Posture broke mid-rep — abort
             repState = 'idle';
             playErrorSound();
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SYNC_STATUS', inSync: false }));
+            }
           } else if (angle < upThreshold && isPostureCorrect) {
             // Full clean rep completed
             repState = 'up';
@@ -1403,6 +1439,73 @@ applyExerciseChange('squat');
 
 // Camera is started by RN after the countdown via window.startCamera()
 // Do NOT auto-start here — the cinematic countdown must play first.
+
+/* ───────────────────────────────────────────────────────────────────
+   VOICE COMMAND RECOGNITION (Web Speech API — Android Chromium only)
+   Posts VOICE_COMMAND {command:'finish'} when "finish"/"stop"/"done"
+   is detected. Falls back silently on iOS WKWebView (no-op).
+─────────────────────────────────────────────────────────────────── */
+(function initVoiceRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return; // iOS WKWebView — not supported, silently skip
+
+  let recognition;
+  let active = false;
+
+  function start() {
+    if (active) return;
+    try {
+      recognition = new SR();
+      recognition.continuous    = true;
+      recognition.interimResults = false;
+      recognition.lang          = 'en-US';
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => { active = true; };
+
+      recognition.onresult = (event) => {
+        const t = event.results[event.results.length - 1][0].transcript.toLowerCase().trim();
+        let cmd = null;
+        if (t.includes('show me') || t.includes('tutorial') || t.includes('how to move') ||
+            t.includes('yara show') || t.includes('demonstrate') || t.includes('show how')) {
+          cmd = 'show_guide';
+        } else if (t.includes('yara close') || t.includes('close guide') || t.includes('hide guide') ||
+                   t.includes('close it') || t.includes('close yara')) {
+          cmd = 'hide_guide';
+        } else if (t.includes('finish') || t.includes('stop') || t.includes('done')) {
+          cmd = 'finish';
+        }
+        if (cmd && window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'VOICE_COMMAND', command: cmd }));
+        }
+      };
+
+      recognition.onerror = (e) => {
+        active = false;
+        // Restart unless the error is fatal
+        if (e.error !== 'not-allowed' && e.error !== 'service-not-allowed') {
+          setTimeout(start, 1500);
+        }
+      };
+
+      recognition.onend = () => {
+        active = false;
+        setTimeout(start, 500); // auto-restart for continuous listening
+      };
+
+      recognition.start();
+    } catch (e) {
+      // Silently ignore if unavailable
+    }
+  }
+
+  // Delay start until camera is actually running so mic/camera don't conflict
+  const _origStart = window.startCamera;
+  window.startCamera = async function() {
+    await _origStart();
+    setTimeout(start, 2000);
+  };
+})();
 </script>
 </body>
 </html>

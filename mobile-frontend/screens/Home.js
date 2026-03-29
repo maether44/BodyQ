@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -10,8 +10,7 @@ import { useDashboard } from '../hooks/useDashboard';
 import { useShakySteps } from '../hooks/useShakySteps';
 import WaterTracker from '../components/home/WaterTracker'; // Your interactive cup component
 import { COLORS } from '../constants/colors';
-
-const { width } = Dimensions.get('window');
+import { supabase } from '../lib/supabase';
 
 // ─── Level 5 Bento Components ───────────────────────────────────────────────
 
@@ -29,12 +28,23 @@ export default function Home({ navigation }) {
   const { steps: liveSteps } = useShakySteps(user?.id);
   const totalSteps = (stats?.steps || 0) + liveSteps;
   const [displayCal, setDisplayCal] = useState(0);
+  const [lastSession, setLastSession] = useState(null);
 
-  // Re-fetch dashboard data every time this screen comes into focus
-  // (ensures calorie ring and activity bars update right after a workout)
   useFocusEffect(
     useCallback(() => {
       refresh();
+      (async () => {
+        const { data: { user: u } } = await supabase.auth.getUser();
+        if (!u) return;
+        const { data } = await supabase
+          .from('workout_sessions')
+          .select('exercise_name, reps, posture_score, created_at')
+          .eq('user_id', u.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        setLastSession(data ?? null);
+      })();
     }, [refresh])
   );
 
@@ -191,20 +201,37 @@ export default function Home({ navigation }) {
           </BentoCard>
         )}
 
-        {/* 6. WORKOUT (Wide Card) */}
+        {/* 6. LAST SESSION / GO TRAIN */}
         <BentoCard delay={700} style={styles.workoutCard}>
           <View style={styles.workoutContent}>
-             <View>
-                <Text style={styles.cardLabel}>TODAY'S PLAN</Text>
-                <Text style={styles.workoutTitle}>Upper Body Power</Text>
-                <Text style={styles.workoutSub}>45 min · Strength</Text>
-             </View>
-             <Pressable 
-                style={styles.playBtn}
-                onPress={() => navigation.navigate('Training')}
-             >
-                <Ionicons name="play" size={24} color="#000" />
-             </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardLabel}>
+                {lastSession ? 'LAST SESSION' : 'READY TO TRAIN?'}
+              </Text>
+              {lastSession ? (
+                <>
+                  <Text style={styles.workoutTitle}>
+                    {lastSession.exercise_name || 'Workout'}
+                  </Text>
+                  <Text style={styles.workoutSub}>
+                    {lastSession.reps ? `${lastSession.reps} reps` : ''}
+                    {lastSession.reps && lastSession.posture_score ? ' · ' : ''}
+                    {lastSession.posture_score ? `${lastSession.posture_score}% form` : ''}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.workoutTitle}>Start a Workout</Text>
+                  <Text style={styles.workoutSub}>No sessions yet today</Text>
+                </>
+              )}
+            </View>
+            <Pressable
+              style={styles.playBtn}
+              onPress={() => navigation.navigate('Training')}
+            >
+              <Ionicons name="play" size={24} color="#000" />
+            </Pressable>
           </View>
         </BentoCard>
 

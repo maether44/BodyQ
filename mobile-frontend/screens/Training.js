@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, Dimensions,
@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Svg, { Ellipse, Rect, Circle, Path } from 'react-native-svg';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { getMuscleFatigue } from '../services/workoutService';
 
@@ -34,7 +35,6 @@ const SHADOW = {
 
 // ── Static data ──────────────────────────────────────────────
 const WEEK = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-const DONE_DAYS = new Set([0, 1, 2, 4]);
 
 const QUICK_ACTIONS = [
   { icon: 'search',            label: 'Library',   screen: 'ExerciseList' },
@@ -45,12 +45,12 @@ const QUICK_ACTIONS = [
 // ── Fatigue → color / label ──────────────────────────────────
 function fatigueColor(pct) {
   if (pct >= 70) return '#7C5CFC'; // Electric Violet — Fatigued
-  if (pct >= 40) return '#FF9500'; // Amber — Sore
+  if (pct >= 30) return '#FF9500'; // Amber — Sore
   return '#C8F135';                // Neon Lime — Fresh
 }
 function fatigueLabel(pct) {
   if (pct >= 70) return 'FATIGUED';
-  if (pct >= 40) return 'SORE';
+  if (pct >= 30) return 'SORE';
   return 'FRESH';
 }
 const UNTRAINED = 'rgba(255,255,255,0.07)';
@@ -135,27 +135,65 @@ export default function Training({ navigation }) {
     hour < 18 ? 'Good Afternoon' :
     'Good Evening';
 
-  const [fatigueMap, setFatigueMap]   = useState({});
-  const [fatigueList, setFatigueList] = useState([]);
+  const [fatigueMap,     setFatigueMap]     = useState({});
+  const [fatigueList,    setFatigueList]    = useState([]);
   const [fatigueLoading, setFatigueLoading] = useState(true);
+  const [weekDays,       setWeekDays]       = useState(Array(7).fill(false));
+  const [streakCount,    setStreakCount]     = useState(0);
+  const [recoveryPct,    setRecoveryPct]    = useState(100);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const rows = await getMuscleFatigue(user.id);
-        const map = {};
-        rows.forEach(r => { map[r.muscle_name] = r; });
-        setFatigueMap(map);
-        setFatigueList(rows);
-      } catch (e) {
-        console.warn('[BodyQ] fatigue fetch:', e);
-      } finally {
-        setFatigueLoading(false);
-      }
-    })();
+  const loadData = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // ── Muscle fatigue ──────────────────────────────────────
+      const rows = await getMuscleFatigue(user.id);
+      const map = {};
+      rows.forEach(r => { map[r.muscle_name] = r; });
+      setFatigueMap(map);
+      setFatigueList(rows);
+      setRecoveryPct(
+        rows.length === 0
+          ? 100
+          : Math.round(rows.reduce((s, m) => s + (100 - m.fatigue_pct), 0) / rows.length)
+      );
+
+      // ── 7-day consistency streak ────────────────────────────
+      const today = new Date();
+      const dow = today.getDay(); // 0 = Sunday
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+      monday.setHours(0, 0, 0, 0);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 7);
+
+      const { data: sessions } = await supabase
+        .from('workout_sessions')
+        .select('created_at')
+        .eq('user_id', user.id)
+        .gte('created_at', monday.toISOString())
+        .lt('created_at', sunday.toISOString());
+
+      const doneSet = new Set(
+        (sessions ?? []).map(s => new Date(s.created_at).toISOString().split('T')[0])
+      );
+      const days = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        return doneSet.has(d.toISOString().split('T')[0]);
+      });
+      setWeekDays(days);
+      setStreakCount(days.filter(Boolean).length);
+
+    } catch (e) {
+      console.warn('[BodyQ] Training fetch:', e);
+    } finally {
+      setFatigueLoading(false);
+    }
   }, []);
+
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   const handleNav = (screen) => { if (screen) navigation.navigate(screen); };
 
@@ -172,7 +210,7 @@ export default function Training({ navigation }) {
             <Text style={s.subGreeting}>Your studio is ready.</Text>
           </View>
           <View style={[s.recoveryBadge, SHADOW]}>
-            <Text style={s.recoveryNum}>88%</Text>
+            <Text style={s.recoveryNum}>{recoveryPct}%</Text>
             <Text style={s.recoveryLabel}>RECOVERY</Text>
           </View>
         </Animated.View>
@@ -285,15 +323,23 @@ export default function Training({ navigation }) {
             </View>
           </View>
 
-          {/* Callout if a muscle is fatigued */}
-          {topFatigued && (
-            <View style={[s.calloutCard, SHADOW]}>
-              <Ionicons name="warning-outline" size={16} color="#FF9500" />
-              <Text style={s.calloutTxt}>
-                <Text style={{ color: '#FF9500', fontWeight: '900' }}>{topFatigued.muscle_name}</Text>
-                {` is at ${topFatigued.fatigue_pct}% fatigue — consider a rest day or switch muscle groups.`}
+          {/* Yara Insight card */}
+          {fatigueList.length > 0 && (
+            <LinearGradient
+              colors={['#7C5CFC', '#4A2FC8']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={[s.yaraCard, SHADOW]}
+            >
+              <View style={s.yaraHeader}>
+                <Text style={s.yaraTitle}>YARA INSIGHT</Text>
+                <View style={s.yaraLiveDot} />
+              </View>
+              <Text style={s.yaraText}>
+                {topFatigued
+                  ? `"Your ${topFatigued.muscle_name} are at ${topFatigued.fatigue_pct}% fatigue. I recommend ${topFatigued.fatigue_pct >= 70 ? 'a rest day or Upper Body' : 'lighter work'} for your next session."`
+                  : `"All muscles are recovering well. You're ready for a full session today!"`}
               </Text>
-            </View>
+            </LinearGradient>
           )}
         </Animated.View>
 
@@ -302,11 +348,11 @@ export default function Training({ navigation }) {
           <View style={s.streakHeader}>
             <Ionicons name="flame" size={16} color={C.lime} />
             <Text style={s.streakTitle}>Consistency</Text>
-            <Text style={s.streakSub}>4 / 7 days</Text>
+            <Text style={s.streakSub}>{streakCount} / 7 days</Text>
           </View>
           <View style={s.weekRow}>
             {WEEK.map((day, i) => {
-              const done = DONE_DAYS.has(i);
+              const done = weekDays[i];
               return (
                 <View key={i} style={s.dayCol}>
                   <View style={[s.dayDot, done && s.dayDotDone]}>
@@ -442,9 +488,12 @@ const s = StyleSheet.create({
   legendDot:   { width: 7, height: 7, borderRadius: 3.5 },
   legendTxt:   { color: C.sub, fontSize: 9, fontWeight: '700' },
 
-  // Fatigue callout
-  calloutCard: { backgroundColor: '#FF950018', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderWidth: 1, borderColor: '#FF950040', marginBottom: 4 },
-  calloutTxt:  { color: '#FFFFFF', fontSize: 12, lineHeight: 18, flex: 1 },
+  // Yara Insight card
+  yaraCard:    { borderRadius: 18, padding: 16, marginBottom: 4 },
+  yaraHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  yaraTitle:   { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '900', letterSpacing: 1.5 },
+  yaraLiveDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#C8F135', shadowColor: '#C8F135', shadowRadius: 8, shadowOpacity: 1 },
+  yaraText:    { color: '#FFF', fontSize: 13, lineHeight: 20, fontWeight: '500' },
 
   // Streak
   streakCard:   { backgroundColor: C.card, borderRadius: 20, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: C.border, marginTop: 16 },
